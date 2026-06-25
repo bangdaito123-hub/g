@@ -1,3135 +1,631 @@
--- Ten Hub - Blox Fruits Script
--- UI: Rayfield (White Theme)
--- All functions from original Ten Hub, except UI rebuilt with Rayfield.
--- Includes: Auto Farm, Auto Boss, Auto Elite, Auto Mastery, Auto Race, Auto Sea Event, Auto Raid, Teleports, ESP, etc.
--- Also includes anti-ban bypass and fix lag.
+-- ================================================================
+-- UNIVERSAL HUB - RAYFIELD UI (Chính thống từ sirius.menu/rayfield)
+-- GỘP TOÀN BỘ: Player, Combat, Aim (smoothness, tia đỏ, hitbox),
+-- Teleport, ESP, Misc. F5 mở/đóng menu.
+-- ================================================================
 
--- ==================== LOAD RAYFIELD ====================
-repeat wait() until game:IsLoaded()
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+-- ===== LOAD RAYFIELD UI =====
+local Rayfield = nil
+local success, err = pcall(function()
+    Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+if not success or not Rayfield then
+    pcall(function()
+        Rayfield = loadstring(game:HttpGet('https://raw.githubusercontent.com/UI-Interface/CustomFIeld/main/RayField.lua'))()
+    end)
+end
+if not Rayfield then
+    warn("Không thể load Rayfield UI. Kiểm tra kết nối mạng.")
+    return
+end
+
+-- ===== BIẾN TOÀN CỤC =====
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
+
+-- ===== LẤY CHARACTER =====
+local function GetCharacter()
+    return LocalPlayer.Character
+end
+local function GetHumanoid()
+    local c = GetCharacter()
+    return c and c:FindFirstChild("Humanoid")
+end
+local function GetRootPart()
+    local c = GetCharacter()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+-- ===== TẠO WINDOW =====
 local Window = Rayfield:CreateWindow({
-    Name = "Shadow Hub",
-    LoadingTitle = "Shadow Hub",
-    LoadingSubtitle = "by Shadow",
+    Name = "UNIVERSAL HUB",
+    LoadingTitle = "Đang tải...",
+    LoadingSubtitle = "by nhatanh Dev",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "ShadowHub",
-        FileName = "Config"
+        FolderName = "UniversalHub",
+        FileName = "Settings"
     },
-    Discord = {
-        Enabled = false,
-        Invite = "noinvitelink",
-        RememberJoins = true
-    },
+    Discord = { Enabled = false, Invite = "", RememberJoins = false },
     KeySystem = false,
     KeySettings = {
         Title = "Key System",
-        Subtitle = "Enter Key",
-        Note = "No key needed",
+        Subtitle = "Nhập key",
+        Note = "Liên hệ admin",
         FileName = "Key",
         SaveKey = true,
         GrabKeyFromSite = false,
-        Key = {"123"}
+        Key = {"free"}
     }
 })
 
--- ==================== CREATE TABS ====================
-local TabStatus = Window:CreateTab("Status", 4483362458)
-local TabGeneral = Window:CreateTab("General", 4483362458)
-local TabSetting = Window:CreateTab("Settings", 4483362458)
-local TabItem = Window:CreateTab("Items", 4483362458)
-local TabRace = Window:CreateTab("Race & Mirage", 4483362458)
-local TabSeaEvent = Window:CreateTab("Sea Events", 4483362458)
-local TabLocal = Window:CreateTab("Local Player", 4483362458)
-local TabVisual = Window:CreateTab("Visuals", 4483362458)
-local TabRaid = Window:CreateTab("Raid", 4483362458)
-local TabTeleport = Window:CreateTab("Teleports", 4483362458)
-local TabShop = Window:CreateTab("Shop", 4483362458)
-local TabDevil = Window:CreateTab("Devil Fruits", 4483362458)
-local TabMisc = Window:CreateTab("Misc", 4483362458)
+-- ===== TẠO TAB =====
+local PlayerTab = Window:CreateTab("👤 Người chơi", 4483362458)
+local CombatTab = Window:CreateTab("⚔️ Chiến đấu", 4483362458)
+local AimTab = Window:CreateTab("🎯 Aim", 4483362458)
+local TeleportTab = Window:CreateTab("🚀 Dịch chuyển", 4483362458)
+local ESPTab = Window:CreateTab("👁️ ESP", 4483362458)
+local MiscTab = Window:CreateTab("⚙️ Tùy chỉnh", 4483362458)
 
--- ==================== GLOBAL VARIABLES (from original script) ====================
-getgenv().Team = "Pirates" -- or "Marines"
-getgenv().SelectWeapon = "Melee"
-getgenv().TweenSpeed = "350"
-getgenv().SpeedBoat = "300"
-getgenv().SelectWeaponTrial = "Melee"
-getgenv().SelectBoss = "The Gorilla King"
-getgenv().SelectChip = "Flame"
-getgenv().SelectIsland = "Middle Town"
-getgenv().SelectFast = "Sky Island 1"
-getgenv().SelectFruit = ""
-getgenv().SelectFruitEat = ""
-getgenv().CodeSelect = "NOOB_REFUND"
-getgenv().SelectStateHaki = "State 0"
-getgenv().SelectedBoat = "PirateGrandBrigade"
-getgenv().SelectedZone = "Zone 5"
+-- ================================================================
+-- TAB NGƯỜI CHƠI
+-- ================================================================
+local PlayerSection = PlayerTab:CreateSection("Điều khiển nhân vật")
 
--- ==================== ORIGINAL FUNCTIONS (from Ten Hub) ====================
-local Players = game:GetService("Players")
-local Player = Players.LocalPlayer
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local VirtualUser = game:GetService("VirtualUser")
-local HttpService = game:GetService("HttpService")
-local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-
-local function CheckQuest()
-    MyLevel = Player.Data.Level.Value
-    if game.PlaceId == 2753915549 then -- World1
-        if MyLevel <= 9 then
-            Mon = "Bandit"
-            LevelQuest = 1
-            NameQuest = "BanditQuest1"
-            NameMon = "Bandit"
-            CFrameQuest = CFrame.new(1059, 17, 1546)
-            CFrameMon = CFrame.new(943, 45, 1562)
-        elseif MyLevel <= 14 then
-            Mon = "Monkey"
-            LevelQuest = 1
-            NameQuest = "JungleQuest"
-            NameMon = "Monkey"
-            CFrameQuest = CFrame.new(-1598, 37, 153)
-            CFrameMon = CFrame.new(-1524, 50, 37)
-        elseif MyLevel <= 29 then
-            Mon = "Gorilla"
-            LevelQuest = 2
-            NameQuest = "JungleQuest"
-            NameMon = "Gorilla"
-            CFrameQuest = CFrame.new(-1598, 37, 153)
-            CFrameMon = CFrame.new(-1128, 40, -451)
-        elseif MyLevel <= 39 then
-            Mon = "Pirate"
-            LevelQuest = 1
-            NameQuest = "BuggyQuest1"
-            NameMon = "Pirate"
-            CFrameQuest = CFrame.new(-1140, 4, 3829)
-            CFrameMon = CFrame.new(-1262, 40, 3905)
-        elseif MyLevel <= 59 then
-            Mon = "Brute"
-            LevelQuest = 2
-            NameQuest = "BuggyQuest1"
-            NameMon = "Brute"
-            CFrameQuest = CFrame.new(-1140, 4, 3829)
-            CFrameMon = CFrame.new(-976, 55, 4304)
-        elseif MyLevel <= 74 then
-            Mon = "Desert Bandit"
-            LevelQuest = 1
-            NameQuest = "DesertQuest"
-            NameMon = "Desert Bandit"
-            CFrameQuest = CFrame.new(897, 6, 4389)
-            CFrameMon = CFrame.new(924, 7, 4482)
-        elseif MyLevel <= 89 then
-            Mon = "Desert Officer"
-            LevelQuest = 2
-            NameQuest = "DesertQuest"
-            NameMon = "Desert Officer"
-            CFrameQuest = CFrame.new(897, 6, 4389)
-            CFrameMon = CFrame.new(1608, 9, 4371)
-        elseif MyLevel <= 99 then
-            Mon = "Snow Bandit"
-            LevelQuest = 1
-            NameQuest = "SnowQuest"
-            NameMon = "Snow Bandit"
-            CFrameQuest = CFrame.new(1385, 87, -1298)
-            CFrameMon = CFrame.new(1362, 120, -1531)
-        elseif MyLevel <= 119 then
-            Mon = "Snowman"
-            LevelQuest = 2
-            NameQuest = "SnowQuest"
-            NameMon = "Snowman"
-            CFrameQuest = CFrame.new(1385, 87, -1298)
-            CFrameMon = CFrame.new(1243, 140, -1437)
-        elseif MyLevel <= 149 then
-            Mon = "Chief Petty Officer"
-            LevelQuest = 1
-            NameQuest = "MarineQuest2"
-            NameMon = "Chief Petty Officer"
-            CFrameQuest = CFrame.new(-5035, 29, 4326)
-            CFrameMon = CFrame.new(-4881, 23, 4274)
-        elseif MyLevel <= 174 then
-            Mon = "Sky Bandit"
-            LevelQuest = 1
-            NameQuest = "SkyQuest"
-            NameMon = "Sky Bandit"
-            CFrameQuest = CFrame.new(-4844, 718, -2621)
-            CFrameMon = CFrame.new(-4953, 296, -2899)
-        elseif MyLevel <= 189 then
-            Mon = "Dark Master"
-            LevelQuest = 2
-            NameQuest = "SkyQuest"
-            NameMon = "Dark Master"
-            CFrameQuest = CFrame.new(-4844, 718, -2621)
-            CFrameMon = CFrame.new(-5260, 391, -2229)
-        elseif MyLevel <= 209 then
-            Mon = "Prisoner"
-            LevelQuest = 1
-            NameQuest = "PrisonerQuest"
-            NameMon = "Prisoner"
-            CFrameQuest = CFrame.new(5306, 2, 477)
-            CFrameMon = CFrame.new(5099, "-0", 474)
-        elseif MyLevel <= 249 then
-            Mon = "Dangerous Prisoner"
-            LevelQuest = 2
-            NameQuest = "PrisonerQuest"
-            NameMon = "Dangerous Prisoner"
-            CFrameQuest = CFrame.new(5306, 2, 477)
-            CFrameMon = CFrame.new(5655, 16, 866)
-        elseif MyLevel <= 274 then
-            Mon = "Toga Warrior"
-            LevelQuest = 1
-            NameQuest = "ColosseumQuest"
-            NameMon = "Toga Warrior"
-            CFrameQuest = CFrame.new(-1581, 7, -2982)
-            CFrameMon = CFrame.new(-1820, 51, -2741)
-        elseif MyLevel <= 299 then
-            Mon = "Gladiator"
-            LevelQuest = 2
-            NameQuest = "ColosseumQuest"
-            NameMon = "Gladiator"
-            CFrameQuest = CFrame.new(-1581, 7, -2982)
-            CFrameMon = CFrame.new(-1268, 30, -2996)
-        elseif MyLevel <= 324 then
-            Mon = "Military Soldier"
-            LevelQuest = 1
-            NameQuest = "MagmaQuest"
-            NameMon = "Military Soldier"
-            CFrameQuest = CFrame.new(-5319, 12, 8515)
-            CFrameMon = CFrame.new(-5335, 46, 8638)
-        elseif MyLevel <= 374 then
-            Mon = "Military Spy"
-            LevelQuest = 2
-            NameQuest = "MagmaQuest"
-            NameMon = "Military Spy"
-            CFrameQuest = CFrame.new(-5319, 12, 8515)
-            CFrameMon = CFrame.new(-5803, 86, 8829)
-        elseif MyLevel <= 399 then
-            Mon = "Fishman Warrior"
-            LevelQuest = 1
-            NameQuest = "FishmanQuest"
-            NameMon = "Fishman Warrior"
-            CFrameQuest = CFrame.new(61122, 18, 1567)
-            CFrameMon = CFrame.new(60998, 50, 1534)
-        elseif MyLevel <= 449 then
-            Mon = "Fishman Commando"
-            LevelQuest = 2
-            NameQuest = "FishmanQuest"
-            NameMon = "Fishman Commando"
-            CFrameQuest = CFrame.new(61122, 18, 1567)
-            CFrameMon = CFrame.new(61866, 55, 1655)
-        elseif MyLevel <= 474 then
-            Mon = "God's Guard"
-            LevelQuest = 1
-            NameQuest = "SkyExp1Quest"
-            NameMon = "God's Guard"
-            CFrameQuest = CFrame.new(-4720, 846, -1951)
-            CFrameMon = CFrame.new(-4720, 846, -1951)
-        elseif MyLevel <= 524 then
-            Mon = "Shanda"
-            LevelQuest = 2
-            NameQuest = "SkyExp1Quest"
-            NameMon = "Shanda"
-            CFrameQuest = CFrame.new(-7861, 5545, -381)
-            CFrameMon = CFrame.new(-7741, 5580, -395)
-        elseif MyLevel <= 549 then
-            Mon = "Royal Squad"
-            LevelQuest = 1
-            NameQuest = "SkyExp2Quest"
-            NameMon = "Royal Squad"
-            CFrameQuest = CFrame.new(-7903, 5636, -1412)
-            CFrameMon = CFrame.new(-7727, 5650, -1410)
-        elseif MyLevel <= 624 then
-            Mon = "Royal Soldier"
-            LevelQuest = 2
-            NameQuest = "SkyExp2Quest"
-            NameMon = "Royal Soldier"
-            CFrameQuest = CFrame.new(-7903, 5636, -1412)
-            CFrameMon = CFrame.new(-7894, 5640, -1629)
-        elseif MyLevel <= 649 then
-            Mon = "Galley Pirate"
-            LevelQuest = 1
-            NameQuest = "FountainQuest"
-            NameMon = "Galley Pirate"
-            CFrameQuest = CFrame.new(5258, 39, 4052)
-            CFrameMon = CFrame.new(5391, 70, 4023)
-        elseif MyLevel >= 650 then
-            Mon = "Galley Captain"
-            LevelQuest = 2
-            NameQuest = "FountainQuest"
-            NameMon = "Galley Captain"
-            CFrameQuest = CFrame.new(5258, 39, 4052)
-            CFrameMon = CFrame.new(5985, 70, 4790)
-        end
-    elseif game.PlaceId == 4442272183 then -- World2
-        if MyLevel <= 724 then
-            Mon = "Raider"
-            LevelQuest = 1
-            NameQuest = "Area1Quest"
-            NameMon = "Raider"
-            CFrameQuest = CFrame.new(-427, 73, 1835)
-            CFrameMon = CFrame.new(-614, 90, 2240)
-        elseif MyLevel <= 774 then
-            Mon = "Mercenary"
-            LevelQuest = 2
-            NameQuest = "Area1Quest"
-            NameMon = "Mercenary"
-            CFrameQuest = CFrame.new(-427, 73, 1835)
-            CFrameMon = CFrame.new(-867, 110, 1621)
-        elseif MyLevel <= 874 then
-            Mon = "Swan Pirate"
-            LevelQuest = 1
-            NameQuest = "Area2Quest"
-            NameMon = "Swan Pirate"
-            CFrameQuest = CFrame.new(635, 73, 919)
-            CFrameMon = CFrame.new(635, 73, 919)
-        elseif MyLevel <= 899 then
-            Mon = "Marine Lieutenant"
-            LevelQuest = 1
-            NameQuest = "MarineQuest3"
-            NameMon = "Marine Lieutenant"
-            CFrameQuest = CFrame.new(-2441, 73, -3219)
-            CFrameMon = CFrame.new(-2552, 110, -3050)
-        elseif MyLevel <= 949 then
-            Mon = "Marine Captain"
-            LevelQuest = 2
-            NameQuest = "MarineQuest3"
-            NameMon = "Marine Captain"
-            CFrameQuest = CFrame.new(-2441, 73, -3219)
-            CFrameMon = CFrame.new(-1695, 110, -3299)
-        elseif MyLevel <= 974 then
-            Mon = "Zombie"
-            LevelQuest = 1
-            NameQuest = "ZombieQuest"
-            NameMon = "Zombie"
-            CFrameQuest = CFrame.new(-5495, 48, -794)
-            CFrameMon = CFrame.new(-5715, 90, -917)
-        elseif MyLevel <= 999 then
-            Mon = "Vampire"
-            LevelQuest = 2
-            NameQuest = "ZombieQuest"
-            NameMon = "Vampire"
-            CFrameQuest = CFrame.new(-5495, 48, -794)
-            CFrameMon = CFrame.new(-6027, 50, -1130)
-        elseif MyLevel <= 1049 then
-            Mon = "Snow Trooper"
-            LevelQuest = 1
-            NameQuest = "SnowMountainQuest"
-            NameMon = "Snow Trooper"
-            CFrameQuest = CFrame.new(607, 401, -5371)
-            CFrameMon = CFrame.new(445, 440, -5175)
-        elseif MyLevel <= 1099 then
-            Mon = "Winter Warrior"
-            LevelQuest = 2
-            NameQuest = "SnowMountainQuest"
-            NameMon = "Winter Warrior"
-            CFrameQuest = CFrame.new(607, 401, -5371)
-            CFrameMon = CFrame.new(1224, 460, -5332)
-        elseif MyLevel <= 1124 then
-            Mon = "Lab Subordinate"
-            LevelQuest = 1
-            NameQuest = "IceSideQuest"
-            NameMon = "Lab Subordinate"
-            CFrameQuest = CFrame.new(-6061, 16, -4904)
-            CFrameMon = CFrame.new(-5941, 50, -4322)
-        elseif MyLevel <= 1174 then
-            Mon = "Horned Warrior"
-            LevelQuest = 2
-            NameQuest = "IceSideQuest"
-            NameMon = "Horned Warrior"
-            CFrameQuest = CFrame.new(-6061, 16, -4904)
-            CFrameMon = CFrame.new(-6306, 50, -5752)
-        elseif MyLevel <= 1199 then
-            Mon = "Magma Ninja"
-            LevelQuest = 1
-            NameQuest = "FireSideQuest"
-            NameMon = "Magma Ninja"
-            CFrameQuest = CFrame.new(-5430, 16, -5298)
-            CFrameMon = CFrame.new(-5233, 60, -6227)
-        elseif MyLevel <= 1249 then
-            Mon = "Lava Pirate"
-            LevelQuest = 2
-            NameQuest = "FireSideQuest"
-            NameMon = "Lava Pirate"
-            CFrameQuest = CFrame.new(-5430, 16, -5298)
-            CFrameMon = CFrame.new(-4955, 60, -4836)
-        elseif MyLevel <= 1274 then
-            Mon = "Ship Deckhand"
-            LevelQuest = 1
-            NameQuest = "ShipQuest1"
-            NameMon = "Ship Deckhand"
-            CFrameQuest = CFrame.new(1033, 125, 32909)
-            CFrameMon = CFrame.new(1033, 125, 32909)
-        elseif MyLevel <= 1299 then
-            Mon = "Ship Engineer"
-            LevelQuest = 2
-            NameQuest = "ShipQuest1"
-            NameMon = "Ship Engineer"
-            CFrameQuest = CFrame.new(1033, 125, 32909)
-            CFrameMon = CFrame.new(809, 80, 33090)
-        elseif MyLevel <= 1324 then
-            Mon = "Ship Steward"
-            LevelQuest = 1
-            NameQuest = "ShipQuest2"
-            NameMon = "Ship Steward"
-            CFrameQuest = CFrame.new(973, 125, 33245)
-            CFrameMon = CFrame.new(838, 160, 33408)
-        elseif MyLevel <= 1349 then
-            Mon = "Ship Officer"
-            LevelQuest = 2
-            NameQuest = "ShipQuest2"
-            NameMon = "Ship Officer"
-            CFrameQuest = CFrame.new(973, 125, 33245)
-            CFrameMon = CFrame.new(1238, 220, 33148)
-        elseif MyLevel <= 1374 then
-            Mon = "Arctic Warrior"
-            LevelQuest = 1
-            NameQuest = "FrostQuest"
-            NameMon = "Arctic Warrior"
-            CFrameQuest = CFrame.new(5668, 28, -6484)
-            CFrameMon = CFrame.new(5836, 80, -6257)
-        elseif MyLevel <= 1424 then
-            Mon = "Snow Lurker"
-            LevelQuest = 2
-            NameQuest = "FrostQuest"
-            NameMon = "Snow Lurker"
-            CFrameQuest = CFrame.new(5668, 28, -6484)
-            CFrameMon = CFrame.new(5700, 80, -6724)
-        elseif MyLevel <= 1449 then
-            Mon = "Sea Soldier"
-            LevelQuest = 1
-            NameQuest = "ForgottenQuest"
-            NameMon = "Sea Soldier"
-            CFrameQuest = CFrame.new(-3056, 240, -10145)
-            CFrameMon = CFrame.new(-2583, 80, -9821)
-        elseif MyLevel >= 1450 then
-            Mon = "Water Fighter"
-            LevelQuest = 2
-            NameQuest = "ForgottenQuest"
-            NameMon = "Water Fighter"
-            CFrameQuest = CFrame.new(-3056, 240, -10145)
-            CFrameMon = CFrame.new(-3339, 290, -10412)
-        end
-    elseif game.PlaceId == 7449423635 then -- World3
-        if MyLevel <= 1524 then
-            Mon = "Pirate Millionaire"
-            LevelQuest = 1
-            NameQuest = "PiratePortQuest"
-            NameMon = "Pirate Millionaire"
-            CFrameQuest = CFrame.new(-291, 44, 5580)
-            CFrameMon = CFrame.new(-44, 70, 5623)
-        elseif MyLevel <= 1574 then
-            Mon = "Pistol Billionaire"
-            LevelQuest = 2
-            NameQuest = "PiratePortQuest"
-            NameMon = "Pistol Billionaire"
-            CFrameQuest = CFrame.new(-291, 44, 5580)
-            CFrameMon = CFrame.new(219, 105, 6018)
-        elseif MyLevel <= 1599 then
-            Mon = "Dragon Crew Warrior"
-            LevelQuest = 1
-            NameQuest = "AmazonQuest"
-            NameMon = "Dragon Crew Warrior"
-            CFrameQuest = CFrame.new(5834, 51, -1103)
-            CFrameMon = CFrame.new(5992, 90, -1581)
-        elseif MyLevel <= 1624 then
-            Mon = "Dragon Crew Archer"
-            NameQuest = "AmazonQuest"
-            LevelQuest = 2
-            NameMon = "Dragon Crew Archer"
-            CFrameQuest = CFrame.new(5834, 51, -1103)
-            CFrameMon = CFrame.new(6472, 370, -151)
-        elseif MyLevel <= 1649 then
-            Mon = "Female Islander"
-            NameQuest = "AmazonQuest2"
-            LevelQuest = 1
-            NameMon = "Female Islander"
-            CFrameQuest = CFrame.new(5448, 602, 748)
-            CFrameMon = CFrame.new(4836, 740, 928)
-        elseif MyLevel <= 1699 then
-            Mon = "Giant Islander"
-            NameQuest = "AmazonQuest2"
-            LevelQuest = 2
-            NameMon = "Giant Islander"
-            CFrameQuest = CFrame.new(5448, 602, 748)
-            CFrameMon = CFrame.new(4784, 660, 155)
-        elseif MyLevel <= 1724 then
-            Mon = "Marine Commodore"
-            LevelQuest = 1
-            NameQuest = "MarineTreeIsland"
-            NameMon = "Marine Commodore"
-            CFrameQuest = CFrame.new(2180, 29, -6738)
-            CFrameMon = CFrame.new(3156, 120, -7837)
-        elseif MyLevel <= 1774 then
-            Mon = "Marine Rear Admiral"
-            NameMon = "Marine Rear Admiral"
-            NameQuest = "MarineTreeIsland"
-            LevelQuest = 2
-            CFrameQuest = CFrame.new(2180, 29, -6738)
-            CFrameMon = CFrame.new(3205, 120, -6742)
-        elseif MyLevel <= 1799 then
-            Mon = "Fishman Raider"
-            LevelQuest = 1
-            NameQuest = "DeepForestIsland3"
-            NameMon = "Fishman Raider"
-            CFrameQuest = CFrame.new(-10581, 332, -8758)
-            CFrameMon = CFrame.new(-10550, 380, -8574)
-        elseif MyLevel <= 1824 then
-            Mon = "Fishman Captain"
-            LevelQuest = 2
-            NameQuest = "DeepForestIsland3"
-            NameMon = "Fishman Captain"
-            CFrameQuest = CFrame.new(-10581, 332, -8758)
-            CFrameMon = CFrame.new(-10764, 380, -8799)
-        elseif MyLevel <= 1849 then
-            Mon = "Forest Pirate"
-            LevelQuest = 1
-            NameQuest = "DeepForestIsland"
-            NameMon = "Forest Pirate"
-            CFrameQuest = CFrame.new(-13233, 332, -7626)
-            CFrameMon = CFrame.new(-13335, 380, -7660)
-        elseif MyLevel <= 1899 then
-            Mon = "Mythological Pirate"
-            LevelQuest = 2
-            NameQuest = "DeepForestIsland"
-            NameMon = "Mythological Pirate"
-            CFrameQuest = CFrame.new(-13233, 332, -7626)
-            CFrameMon = CFrame.new(-13844, 520, -7016)
-        elseif MyLevel <= 1924 then
-            Mon = "Jungle Pirate"
-            LevelQuest = 1
-            NameQuest = "DeepForestIsland2"
-            NameMon = "Jungle Pirate"
-            CFrameQuest = CFrame.new(-12682, 391, -9901)
-            CFrameMon = CFrame.new(-12166, 380, -10375)
-        elseif MyLevel <= 1974 then
-            Mon = "Musketeer Pirate"
-            LevelQuest = 2
-            NameQuest = "DeepForestIsland2"
-            NameMon = "Musketeer Pirate"
-            CFrameQuest = CFrame.new(-12682, 391, -9901)
-            CFrameMon = CFrame.new(-13098, 450, -9831)
-        elseif MyLevel <= 1999 then
-            Mon = "Reborn Skeleton"
-            LevelQuest = 1
-            NameQuest = "HauntedQuest1"
-            NameMon = "Reborn Skeleton"
-            CFrameQuest = CFrame.new(-9481, 142, 5565)
-            CFrameMon = CFrame.new(-8680, 190, 5852)
-        elseif MyLevel <= 2024 then
-            Mon = "Living Zombie"
-            LevelQuest = 2
-            NameQuest = "HauntedQuest1"
-            NameMon = "Living Zombie"
-            CFrameQuest = CFrame.new(-9481, 142, 5565)
-            CFrameMon = CFrame.new(-10144, 140, 5932)
-        elseif MyLevel <= 2049 then
-            Mon = "Demonic Soul"
-            LevelQuest = 1
-            NameQuest = "HauntedQuest2"
-            NameMon = "Demonic Soul"
-            CFrameQuest = CFrame.new(-9515, 172, 607)
-            CFrameMon = CFrame.new(-9275, 210, 6166)
-        elseif MyLevel <= 2074 then
-            Mon = "Posessed Mummy"
-            LevelQuest = 2
-            NameQuest = "HauntedQuest2"
-            NameMon = "Posessed Mummy"
-            CFrameQuest = CFrame.new(-9515, 172, 607)
-            CFrameMon = CFrame.new(-9442, 60, 6304)
-        elseif MyLevel <= 2099 then
-            Mon = "Peanut Scout"
-            LevelQuest = 1
-            NameQuest = "NutsIslandQuest"
-            NameMon = "Peanut Scout"
-            CFrameQuest = CFrame.new(-2104, 38, -10194)
-            CFrameMon = CFrame.new(-1870, 100, -10225)
-        elseif MyLevel <= 2124 then
-            Mon = "Peanut President"
-            LevelQuest = 2
-            NameQuest = "NutsIslandQuest"
-            NameMon = "Peanut President"
-            CFrameQuest = CFrame.new(-2104, 38, -10194)
-            CFrameMon = CFrame.new(-2005, 100, -10585)
-        elseif MyLevel <= 2149 then
-            Mon = "Ice Cream Chef"
-            LevelQuest = 1
-            NameQuest = "IceCreamIslandQuest"
-            NameMon = "Ice Cream Chef"
-            CFrameQuest = CFrame.new(-818, 66, -10964)
-            CFrameMon = CFrame.new(-501, 100, -10883)
-        elseif MyLevel <= 2199 then
-            Mon = "Ice Cream Commander"
-            LevelQuest = 2
-            NameQuest = "IceCreamIslandQuest"
-            NameMon = "Ice Cream Commander"
-            CFrameQuest = CFrame.new(-818, 66, -10964)
-            CFrameMon = CFrame.new(-690, 100, -11350)
-        elseif MyLevel <= 2224 then
-            Mon = "Cookie Crafter"
-            LevelQuest = 1
-            NameQuest = "CakeQuest1"
-            NameMon = "Cookie Crafter"
-            CFrameQuest = CFrame.new(-2023, 38, -12028)
-            CFrameMon = CFrame.new(-2332, 90, -12049)
-        elseif MyLevel <= 2249 then
-            Mon = "Cake Guard"
-            LevelQuest = 2
-            NameQuest = "CakeQuest1"
-            NameMon = "Cake Guard"
-            CFrameQuest = CFrame.new(-2023, 38, -12028)
-            CFrameMon = CFrame.new(-1514, 90, -12422)
-        elseif MyLevel <= 2274 then
-            Mon = "Baking Staff"
-            LevelQuest = 1
-            NameQuest = "CakeQuest2"
-            NameMon = "Baking Staff"
-            CFrameQuest = CFrame.new(-1931, 38, -12840)
-            CFrameMon = CFrame.new(-1930, 90, -12963)
-        elseif MyLevel <= 2299 then
-            Mon = "Head Baker"
-            LevelQuest = 2
-            NameQuest = "CakeQuest2"
-            NameMon = "Head Baker"
-            CFrameQuest = CFrame.new(-1931, 38, -12840)
-            CFrameMon = CFrame.new(-2123, 110, -12777)
-        elseif MyLevel <= 2324 then
-            Mon = "Cocoa Warrior"
-            LevelQuest = 1
-            NameQuest = "ChocQuest1"
-            NameMon = "Cocoa Warrior"
-            CFrameQuest = CFrame.new(235, 25, -12199)
-            CFrameMon = CFrame.new(110, 80, -12245)
-        elseif MyLevel <= 2349 then
-            Mon = "Chocolate Bar Battler"
-            LevelQuest = 2
-            NameQuest = "ChocQuest1"
-            NameMon = "Chocolate Bar Battler"
-            CFrameQuest = CFrame.new(235, 25, -12199)
-            CFrameMon = CFrame.new(579, 80, -12413)
-        elseif MyLevel <= 2374 then
-            Mon = "Sweet Thief"
-            LevelQuest = 1
-            NameQuest = "ChocQuest2"
-            NameMon = "Sweet Thief"
-            CFrameQuest = CFrame.new(150, 25, -12777)
-            CFrameMon = CFrame.new(-68, 80, -12692)
-        elseif MyLevel <= 2399 then
-            Mon = "Candy Rebel"
-            LevelQuest = 2
-            NameQuest = "ChocQuest2"
-            NameMon = "Candy Rebel"
-            CFrameQuest = CFrame.new(150, 25, -12777)
-            CFrameMon = CFrame.new(17, 80, -12962)
-        elseif MyLevel <= 2424 then
-            Mon = "Candy Pirate"
-            LevelQuest = 1
-            NameQuest = "CandyQuest1"
-            NameMon = "Candy Pirate"
-            CFrameQuest = CFrame.new(-1148, 14, -14446)
-            CFrameMon = CFrame.new(-1371, 70, -14405)
-        elseif MyLevel <= 2449 then
-            Mon = "Snow Demon"
-            LevelQuest = 2
-            NameQuest = "CandyQuest1"
-            NameMon = "Snow Demon"
-            CFrameQuest = CFrame.new(-1148, 14, -14446)
-            CFrameMon = CFrame.new(-836, 70, -14326)
-        elseif MyLevel <= 2474 then
-            Mon = "Isle Outlaw"
-            LevelQuest = 1
-            NameQuest = "TikiQuest1"
-            NameMon = "Isle Outlaw"
-            CFrameQuest = CFrame.new(-16547, 56, -172)
-            CFrameMon = CFrame.new(-16431, 90, -223)
-        elseif MyLevel <= 2499 then
-            Mon = "Island Boy"
-            LevelQuest = 2
-            NameQuest = "TikiQuest1"
-            NameMon = "Island Boy"
-            CFrameQuest = CFrame.new(-16547, 56, -172)
-            CFrameMon = CFrame.new(-16668, 70, -243)
-        elseif MyLevel <= 2524 then
-            Mon = "Sun-kissed Warrior"
-            LevelQuest = 1
-            NameQuest = "TikiQuest2"
-            NameMon = "kissed"
-            CFrameQuest = CFrame.new(-16540, 56, 1051)
-            CFrameMon = CFrame.new(-16345, 80, 1004)
-        elseif MyLevel <= 2550 then
-            Mon = "Isle Champion"
-            LevelQuest = 2
-            NameQuest = "TikiQuest2"
-            NameMon = "Isle Champion"
-            CFrameQuest = CFrame.new(-16540, 56, 1051)
-            CFrameMon = CFrame.new(-16634, 85, 1106)
-        end
-    end
-end
-
--- Server hop function
-function Hop()
-    local placeId = game.PlaceId
-    local servers = {}
-    local cursor = ""
-    local function fetchServers()
-        local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?sortOrder=Asc&limit=100"
-        if cursor ~= "" then url = url .. "&cursor=" .. cursor end
-        local success, response = pcall(function() return game:HttpGet(url) end)
-        if not success then return end
-        local data = HttpService:JSONDecode(response)
-        if data.nextPageCursor then cursor = data.nextPageCursor else cursor = nil end
-        for _, server in pairs(data.data) do
-            if server.playing < server.maxPlayers then
-                table.insert(servers, server.id)
-            end
-        end
-        if cursor then fetchServers() end
-    end
-    fetchServers()
-    if #servers > 0 then
-        TeleportService:TeleportToPlaceInstance(placeId, servers[math.random(1, #servers)])
-    else
-        TeleportService:Teleport(placeId)
-    end
-end
-
--- Teleport functions
-function TP1(cframe)
-    local player = Player
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local distance = (hrp.Position - cframe.Position).Magnitude
-    local tween = TweenService:Create(hrp, TweenInfo.new(distance / tonumber(getgenv().TweenSpeed), Enum.EasingStyle.Linear), {CFrame = cframe})
-    tween:Play()
-    tween.Completed:Wait()
-end
-
-function TP2(cframe)
-    Player.Character.HumanoidRootPart.CFrame = cframe
-end
-
--- Equip Weapon
-function EquipWeapon(weapon)
-    local player = Player
-    local char = player.Character
-    local backpack = player.Backpack
-    local tool = char:FindFirstChild(weapon) or backpack:FindFirstChild(weapon)
-    if tool then
-        char.Humanoid:EquipTool(tool)
-    end
-end
-
--- Auto Haki
-function AutoHaki()
-    if not Player.Character:FindFirstChild("HasBuso") then
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
-    end
-end
-
--- ==================== ANTI-BAN BYPASS (from previous script) ====================
--- GCInfo Bypass
-task.spawn(function()
-    repeat task.wait() until game:IsLoaded()
-    local Amplitude = 200
-    local RandomValue = {-200, 200}
-    local RandomTime = {.1, 1}
-    local floor = math.floor
-    local cos = math.cos
-    local sin = math.sin
-    local acos = math.acos
-    local pi = math.pi
-    local Maxima = 0
-    while task.wait() do
-        if gcinfo() >= Maxima then
-            Maxima = gcinfo()
-        else
-            break
-        end
-    end
-    task.wait(0.30)
-    local OldGcInfo = gcinfo() + Amplitude
-    local tick = 0
-    local function getreturn()
-        local Formula = ((acos(cos(pi * (tick)))/pi * (Amplitude * 2)) + -Amplitude)
-        return floor(OldGcInfo + Formula)
-    end
-    local Old = hookfunction(getrenv().gcinfo, function(...) return getreturn() end)
-    local Old2 = hookfunction(getrenv().collectgarbage, function(arg, ...)
-        local suc, err = pcall(Old2, arg, ...)
-        if suc and arg == "count" then return getreturn() end
-        return Old2(arg, ...)
-    end)
-    RunService.Stepped:Connect(function()
-        local Formula = ((acos(cos(pi * (tick)))/pi * (Amplitude * 2)) + -Amplitude)
-        if Formula > ((acos(cos(pi * (tick) + 0.01))/pi * (Amplitude * 2)) + -Amplitude) then
-            tick = tick + 0.07
-        else
-            tick = tick + 0.01
-        end
-    end)
-    local old1 = Amplitude
-    for i, v in next, RandomTime do RandomTime[i] = v * 10000 end
-    while wait(RandomTime) do
-        Amplitude = math.random(old1 + RandomValue[1], old1 + RandomValue[2])
-    end
-end)
-
--- Memory Bypass
-task.spawn(function()
-    repeat task.wait() until game:IsLoaded()
-    local RunService = cloneref(game:GetService("RunService"))
-    local Stats = cloneref(game:GetService("Stats"))
-    local CurrMem = Stats:GetTotalMemoryUsageMb()
-    local Rand = 0
-    RunService.Stepped:Connect(function()
-        Rand = Random.new():NextNumber(-10, 10)
-    end)
-    local function GetReturn() return CurrMem + Rand end
-    local _MemBypass = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() and typeof(self) == "Instance" and (method == "GetTotalMemoryUsageMb" or method == "getTotalMemoryUsageMb") and self.ClassName == "Stats" then
-            return GetReturn()
-        end
-        return _MemBypass(self, ...)
-    end)
-    local _MemBypassIndex = hookfunction(Stats.GetTotalMemoryUsageMb, function(self, ...)
-        if not checkcaller() and typeof(self) == "Instance" and self.ClassName == "Stats" then
-            return GetReturn()
-        end
-    end)
-end)
-
--- ==================== FIX LAG SCRIPT (MoonVeil deobfuscated) ====================
-local fixLagSettings = {
-    enabled = false,
-    fpsBoost = true,
-    removeFog = true,
-    removeGrass = true,
-    lowGraphics = true,
-    disableShadows = true,
-    antiLag = true,
-    maxFPS = 60
-}
-local function fixLag()
-    if not fixLagSettings.enabled then return end
-    if fixLagSettings.fpsBoost then
-        RunService.RenderStepped:Wait()
-    end
-    if fixLagSettings.removeFog then
-        Lighting.FogEnd = 100000
-        Lighting.FogStart = 100000
-    end
-    if fixLagSettings.removeGrass then
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("Terrain") then
-                v.WaterWaveSize = 0
-                v.WaterWaveSpeed = 0
-                v.WaterReflectance = 0
-                v.WaterTransparency = 0
-            end
-        end
-    end
-    if fixLagSettings.lowGraphics then
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 100000
-        Lighting.FogStart = 100000
-    end
-    if fixLagSettings.disableShadows then
-        Lighting.Shadows = false
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("Part") or v:IsA("MeshPart") then
-                v.Material = Enum.Material.Plastic
-            end
-        end
-    end
-    if fixLagSettings.antiLag then
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v:IsA("Decal") or v:IsA("Texture") then
-                v:Destroy()
-            end
-        end
-    end
-end
-
--- ==================== UI ELEMENTS ====================
--- Tab: Status
-local sectionStatus = TabStatus:CreateSection("Server Info")
-local timeLabel = TabStatus:CreateLabel("Server Time: ")
-local fpsLabel = TabStatus:CreateLabel("FPS: ")
-local pingLabel = TabStatus:CreateLabel("Ping: ")
-local raceLabel = TabStatus:CreateLabel("Race: ")
-local beliLabel = TabStatus:CreateLabel("Beli: ")
-local fragLabel = TabStatus:CreateLabel("Fragments: ")
-local bountyLabel = TabStatus:CreateLabel("Bounty: ")
-local fruitLabel = TabStatus:CreateLabel("Devil Fruit: ")
-task.spawn(function()
-    while true do
-        local time = math.floor(Workspace.DistributedGameTime + 0.5)
-        local hours = math.floor(time / 3600) % 24
-        local minutes = math.floor(time / 60) % 60
-        local seconds = time % 60
-        timeLabel:Set("Server Time: " .. string.format("%02d:%02d:%02d", hours, minutes, seconds))
-        fpsLabel:Set("FPS: " .. Workspace:GetRealPhysicsFPS())
-        pingLabel:Set("Ping: " .. Stats.Network.ServerStatsItem["Data Ping"]:GetValueString())
-        raceLabel:Set("Race: " .. Player.Data.Race.Value)
-        beliLabel:Set("Beli: " .. Player.Data.Beli.Value)
-        fragLabel:Set("Fragments: " .. Player.Data.Fragments.Value)
-        bountyLabel:Set("Bounty: " .. Player.leaderstats["Bounty/Honor"].Value)
-        fruitLabel:Set("Devil Fruit: " .. (Player.Data.DevilFruit.Value or "None"))
-        wait(1)
-    end
-end)
-
--- Tab: General
-local sectionFarm = TabGeneral:CreateSection("Auto Farm")
-local autoFarmToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Level",
-    CurrentValue = false,
-    Flag = "AutoFarm",
+PlayerTab:CreateSlider({
+    Name = "Tốc độ di chuyển",
+    Range = {16, 250},
+    Increment = 1,
+    Suffix = "Speed",
+    CurrentValue = 16,
+    Flag = "WalkSpeed",
     Callback = function(Value)
-        getgenv().Level = Value
-        if not Value then
-            -- stop tween
-        end
-    end
-})
--- Auto Farm Fast (World1)
-if game.PlaceId == 2753915549 then
-    local autoFarmFastToggle = TabGeneral:CreateToggle({
-        Name = "Auto Farm Fast (Lv.1-300)",
-        CurrentValue = false,
-        Flag = "AutoFarmFast",
-        Callback = function(Value)
-            getgenv().Farmfast = Value
-            getgenv().Stats_Kaitun = Value
-        end
-    })
-end
-local autoKaitunToggle = TabGeneral:CreateToggle({
-    Name = "Auto Kaitun",
-    CurrentValue = false,
-    Flag = "AutoKaitun",
-    Callback = function(Value)
-        getgenv().Level = Value
-        getgenv().SelectWeapon = "Combat"
-        getgenv().Stats_Kaitun = Value
-        getgenv().Superhuman = Value
-        getgenv().SecondSea = Value
-        getgenv().ThirdSea = Value
-        getgenv().BuyLegendarySword = Value
-        getgenv().StoreFruit = Value
-        getgenv().Random_Auto = Value
-        getgenv().BuyAllAib = Value
-        getgenv().BuyAllSword = Value
-    end
-})
-local autoFarmNearestToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Nearest",
-    CurrentValue = false,
-    Flag = "AutoFarmNearest",
-    Callback = function(Value)
-        getgenv().FarmNearest = Value
-    end
-})
-local sectionElite = TabGeneral:CreateSection("Elite Hunter")
-local eliteLabel = TabGeneral:CreateLabel("Total Elite Hunter: ")
-local eliteStatusLabel = TabGeneral:CreateLabel("Status: ")
-local autoEliteToggle = TabGeneral:CreateToggle({
-    Name = "Auto Elite Hunter",
-    CurrentValue = false,
-    Flag = "AutoElite",
-    Callback = function(Value)
-        getgenv().Elitehunter = Value
-        if Value then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("AbandonQuest")
-        end
-    end
-})
-local autoEliteHopToggle = TabGeneral:CreateToggle({
-    Name = "Auto Elite Hunter Hop",
-    CurrentValue = false,
-    Flag = "AutoEliteHop",
-    Callback = function(Value)
-        getgenv().EliteHunterHop = Value
-    end
-})
-task.spawn(function()
-    while true do
-        wait(1)
-        local total = ReplicatedStorage.Remotes.CommF_:InvokeServer("EliteHunter", "Progress")
-        eliteLabel:Set("Total Elite Hunter: " .. total)
-        if ReplicatedStorage:FindFirstChild("Diablo") or Workspace.Enemies:FindFirstChild("Diablo") then
-            eliteStatusLabel:Set("Status: Elite Spawn!")
-        else
-            eliteStatusLabel:Set("Status: Elite Not Spawn")
-        end
-    end
-end)
-
-local sectionChest = TabGeneral:CreateSection("Chest Farm")
-local autoChestToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Chest",
-    CurrentValue = false,
-    Flag = "AutoChest",
-    Callback = function(Value)
-        getgenv().AutoFarmChest = Value
-    end
-})
-local autoStopItemsToggle = TabGeneral:CreateToggle({
-    Name = "Auto Stop Items",
-    CurrentValue = false,
-    Flag = "AutoStopItems",
-    Callback = function(Value)
-        getgenv().StopItemsChest = Value
-    end
-})
-local autoChestMirageToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Chest Mirage Island",
-    CurrentValue = false,
-    Flag = "AutoChestMirage",
-    Callback = function(Value)
-        getgenv().ChestMirage = Value
+        local hum = GetHumanoid()
+        if hum then hum.WalkSpeed = Value end
     end
 })
 
-local sectionPirateRaid = TabGeneral:CreateSection("Pirates Raid")
-local autoPirateRaidToggle = TabGeneral:CreateToggle({
-    Name = "Auto Pirates Raid",
-    CurrentValue = false,
-    Flag = "AutoPirateRaid",
+PlayerTab:CreateSlider({
+    Name = "Sức bật",
+    Range = {50, 500},
+    Increment = 5,
+    Suffix = "Jump",
+    CurrentValue = 50,
+    Flag = "JumpPower",
     Callback = function(Value)
-        getgenv().RaidPirate = Value
+        local hum = GetHumanoid()
+        if hum then hum.JumpPower = Value end
     end
 })
 
-local sectionBone = TabGeneral:CreateSection("Bone Farm")
-local boneLabel = TabGeneral:CreateLabel("Total Bone: N/A")
-local autoBoneToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Bone",
-    CurrentValue = false,
-    Flag = "AutoBone",
-    Callback = function(Value)
-        getgenv().Bone = Value
-    end
-})
-local boneQuestToggle = TabGeneral:CreateToggle({
-    Name = "Accept Quest Bone",
-    CurrentValue = true,
-    Flag = "BoneQuest",
-    Callback = function(Value)
-        getgenv().QuestBone = Value
-    end
-})
-task.spawn(function()
-    while true do
-        wait(1)
-        local total = ReplicatedStorage.Remotes.CommF_:InvokeServer("Bones", "Check") or "N/A"
-        boneLabel:Set("Total Bone: " .. total)
-    end
-end)
-
-local autoRandomBoneToggle = TabGeneral:CreateToggle({
-    Name = "Auto Random Surprise",
-    CurrentValue = false,
-    Flag = "AutoRandomBone",
-    Callback = function(Value)
-        getgenv().Random_Bone = Value
-    end
-})
-local autoPrayToggle = TabGeneral:CreateToggle({
-    Name = "Auto Pray",
-    CurrentValue = false,
-    Flag = "AutoPray",
-    Callback = function(Value)
-        getgenv().Pray = Value
-    end
-})
-local autoTryLuckToggle = TabGeneral:CreateToggle({
-    Name = "Auto Try Luck",
-    CurrentValue = false,
-    Flag = "AutoTryLuck",
-    Callback = function(Value)
-        getgenv().Trylux = Value
-    end
-})
-
-local sectionCakePrince = TabGeneral:CreateSection("Cake Prince / Dough King")
-local cakeKillLabel = TabGeneral:CreateLabel("Killed: ")
-local autoCakePrinceToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Cake Prince",
-    CurrentValue = false,
-    Flag = "AutoCakePrince",
-    Callback = function(Value)
-        getgenv().DoughtBoss = Value
-    end
-})
-local cakeQuestToggle = TabGeneral:CreateToggle({
-    Name = "Accept Quest Cake Prince",
-    CurrentValue = true,
-    Flag = "CakeQuest",
-    Callback = function(Value)
-        getgenv().QuestCake = Value
-    end
-})
-local autoDoughKingToggle = TabGeneral:CreateToggle({
-    Name = "Auto Dough King",
-    CurrentValue = false,
-    Flag = "AutoDoughKing",
-    Callback = function(Value)
-        getgenv().doughking = Value
-    end
-})
-local autoDoughKingHopToggle = TabGeneral:CreateToggle({
-    Name = "Auto Dough King Hop",
-    CurrentValue = false,
-    Flag = "AutoDoughKingHop",
-    Callback = function(Value)
-        getgenv().doughkingHop = Value
-    end
-})
-
-local sectionMastery = TabGeneral:CreateSection("Misc Mastery")
-local autoMasteryFruitToggle = TabGeneral:CreateToggle({
-    Name = "Auto Mastery Fruit",
-    CurrentValue = false,
-    Flag = "AutoMasteryFruit",
-    Callback = function(Value)
-        getgenv().FarmFruitMastery = Value
-        if not Value then getgenv().UseSkill = false end
-    end
-})
-local autoMasteryGunToggle = TabGeneral:CreateToggle({
-    Name = "Auto Mastery Gun",
-    CurrentValue = false,
-    Flag = "AutoMasteryGun",
-    Callback = function(Value)
-        getgenv().FarmGunMastery = Value
-    end
-})
-
-local sectionObservation = TabGeneral:CreateSection("Observation")
-local autoObservationToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Observation",
-    CurrentValue = false,
-    Flag = "AutoObservation",
-    Callback = function(Value)
-        getgenv().Observation = Value
-    end
-})
-local autoObservationHopToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Observation Hop",
-    CurrentValue = false,
-    Flag = "AutoObservationHop",
-    Callback = function(Value)
-        getgenv().Observation_Hop = Value
-    end
-})
-
-local sectionBoss = TabGeneral:CreateSection("Boss Farm")
-local bossStatusLabel = TabGeneral:CreateLabel("Status: Select Boss")
-local bossDropdown = TabGeneral:CreateDropdown({
-    Name = "Select Boss",
-    Options = {"The Gorilla King", "Bobby", "Yeti", "Mob Leader", "Vice Admiral", "Warden", "Chief Warden", "Swan", "Magma Admiral", "Fishman Lord", "Wysper", "Thunder God", "Cyborg", "Saber Expert"},
-    CurrentOption = {"The Gorilla King"},
-    MultipleOptions = false,
-    Flag = "BossSelect",
-    Callback = function(Option)
-        getgenv().SelectBoss = Option[1]
-    end
-})
-local autoBossToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm Boss",
-    CurrentValue = false,
-    Flag = "AutoBoss",
-    Callback = function(Value)
-        getgenv().FarmBoss = Value
-        if Value then
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("AbandonQuest")
-        end
-    end
-})
-local autoAllBossToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm All Boss",
-    CurrentValue = false,
-    Flag = "AutoAllBoss",
-    Callback = function(Value)
-        getgenv().AllBoss = Value
-    end
-})
-local autoAllBossHopToggle = TabGeneral:CreateToggle({
-    Name = "Auto Farm All Boss Hop",
-    CurrentValue = false,
-    Flag = "AutoAllBossHop",
-    Callback = function(Value)
-        getgenv().AllBossHop = Value
-    end
-})
-
--- Tab: Settings
-local sectionFarmSettings = TabSetting:CreateSection("Settings Farming")
-local bypassTPToggle = TabSetting:CreateToggle({
-    Name = "Bypass TP",
-    CurrentValue = false,
-    Flag = "BypassTP",
-    Callback = function(Value)
-        getgenv().BypassTP = Value
-    end
-})
-local speedTweenDropdown = TabSetting:CreateDropdown({
-    Name = "Speed Tween",
-    Options = {"100", "150", "250", "300", "325", "350"},
-    CurrentOption = {"350"},
-    MultipleOptions = false,
-    Flag = "SpeedTween",
-    Callback = function(Option)
-        getgenv().TweenSpeed = Option[1]
-    end
-})
-local stopTweenButton = TabSetting:CreateButton({
-    Name = "Stop All Tween",
-    Callback = function()
-        -- stop tween
-    end
-})
-local bringMobToggle = TabSetting:CreateToggle({
-    Name = "Bring Mob",
-    CurrentValue = true,
-    Flag = "BringMob",
-    Callback = function(Value)
-        getgenv().BringMonster = Value
-    end
-})
-local bringModeDropdown = TabSetting:CreateDropdown({
-    Name = "Bring Mob Mode",
-    Options = {"Low", "Normal", "Super Bring"},
-    CurrentOption = {"Low"},
-    MultipleOptions = false,
-    Flag = "BringMode",
-    Callback = function(Option)
-        getgenv().BringMode = Option[1]
-        if Option[1] == "Low" then getgenv().BringMode = 250
-        elseif Option[1] == "Normal" then getgenv().BringMode = 300
-        else getgenv().BringMode = 350 end
-    end
-})
-local posYDropdown = TabSetting:CreateDropdown({
-    Name = "Select PosY Framing",
-    Options = {"1", "10", "20", "25", "50", "100"},
-    CurrentOption = {"25"},
-    MultipleOptions = false,
-    Flag = "PosY",
-    Callback = function(Option)
-        getgenv().PosY = Option[1]
-    end
-})
-local autoHakiToggle = TabSetting:CreateToggle({
-    Name = "Auto Haki",
-    CurrentValue = true,
-    Flag = "AutoHaki",
-    Callback = function(Value)
-        getgenv().Haki = Value
-    end
-})
-local fastAttackToggle = TabSetting:CreateToggle({
-    Name = "Fast Attack",
-    CurrentValue = true,
-    Flag = "FastAttack",
-    Callback = function(Value)
-        getgenv().Fast_Attack = Value
-        getgenv().DamageAura = Value
-        getgenv().ClickNoCooldown = Value
-    end
-})
-local noAttackAnimationToggle = TabSetting:CreateToggle({
-    Name = "No Attack Animation",
-    CurrentValue = true,
-    Flag = "NoAttackAnimation",
-    Callback = function(Value)
-        getgenv().NoAttackAnimation = Value
-    end
-})
-local disableNotifToggle = TabSetting:CreateToggle({
-    Name = "Disabled Notifications",
-    CurrentValue = false,
-    Flag = "DisableNotif",
-    Callback = function(Value)
-        getgenv().Remove_trct = Value
-        Player.PlayerGui.Notifications.Enabled = not Value
-    end
-})
-local fixLagScreenToggle = TabSetting:CreateToggle({
-    Name = "Fix Lag Screen",
-    CurrentValue = false,
-    Flag = "FixLagScreen",
-    Callback = function(Value)
-        local blur = Lighting:FindFirstChild("BlurEffect") or Instance.new("BlurEffect")
-        blur.Enabled = Value
-        blur.Parent = Lighting
-    end
-})
-local whiteScreenToggle = TabSetting:CreateToggle({
-    Name = "White Screen",
-    CurrentValue = false,
-    Flag = "WhiteScreen",
-    Callback = function(Value)
-        getgenv().WhiteScreen = Value
-        RunService:Set3dRenderingEnabled(not Value)
-    end
-})
-local invisibleMonstersToggle = TabSetting:CreateToggle({
-    Name = "Invisible Monsters",
-    CurrentValue = false,
-    Flag = "InvisibleMonsters",
-    Callback = function(Value)
-        getgenv().hadesinvis = Value
-    end
-})
-local fpsBoostToggle = TabSetting:CreateToggle({
-    Name = "Fps Boost",
-    CurrentValue = false,
-    Flag = "FpsBoost",
-    Callback = function(Value)
-        if Value then
-            -- clean lag function
-        end
-    end
-})
-
-local sectionMasterySettings = TabSetting:CreateSection("Setting Farm Mastery")
-local killAtDropdown = TabSetting:CreateDropdown({
-    Name = "Select % Health Mob",
-    Options = {"10", "20", "50", "70", "100", "150"},
-    CurrentOption = {"70"},
-    MultipleOptions = false,
-    Flag = "KillAt",
-    Callback = function(Option)
-        getgenv().Kill_At = Option[1]
-    end
-})
-local skillZToggle = TabSetting:CreateToggle({
-    Name = "Skill Z",
-    CurrentValue = true,
-    Flag = "SkillZ",
-    Callback = function(Value)
-        getgenv().SkillZ = Value
-    end
-})
-local skillXToggle = TabSetting:CreateToggle({
-    Name = "Skill X",
-    CurrentValue = true,
-    Flag = "SkillX",
-    Callback = function(Value)
-        getgenv().SkillX = Value
-    end
-})
-local skillCToggle = TabSetting:CreateToggle({
-    Name = "Skill C",
-    CurrentValue = true,
-    Flag = "SkillC",
-    Callback = function(Value)
-        getgenv().SkillC = Value
-    end
-})
-local skillVToggle = TabSetting:CreateToggle({
-    Name = "Skill V",
-    CurrentValue = true,
-    Flag = "SkillV",
-    Callback = function(Value)
-        getgenv().SkillV = Value
-    end
-})
-
--- Tab: Items
-local sectionWorld = TabItem:CreateSection("World")
-if game.PlaceId == 2753915549 then
-    local autoSecondSeaToggle = TabItem:CreateToggle({
-        Name = "Auto Second Sea",
-        CurrentValue = false,
-        Flag = "AutoSecondSea",
-        Callback = function(Value)
-            getgenv().SecondSea = Value
-        end
-    })
-end
-if game.PlaceId == 4442272183 then
-    local autoThirdSeaToggle = TabItem:CreateToggle({
-        Name = "Auto Third Sea",
-        CurrentValue = false,
-        Flag = "AutoThirdSea",
-        Callback = function(Value)
-            getgenv().ThirdSea = Value
-        end
-    })
-    local autoFactoryToggle = TabItem:CreateToggle({
-        Name = "Auto Farm Factory",
-        CurrentValue = false,
-        Flag = "AutoFactory",
-        Callback = function(Value)
-            getgenv().Factory = Value
-        end
-    })
-end
-local sectionFightingStyle = TabItem:CreateSection("Fighting Style")
-local autoSuperhumanToggle = TabItem:CreateToggle({
-    Name = "Auto Superhuman",
-    CurrentValue = false,
-    Flag = "AutoSuperhuman",
-    Callback = function(Value)
-        getgenv().Superhuman = Value
-    end
-})
-local autoDeathStepToggle = TabItem:CreateToggle({
-    Name = "Auto DeathStep",
-    CurrentValue = false,
-    Flag = "AutoDeathStep",
-    Callback = function(Value)
-        getgenv().DeathStep = Value
-    end
-})
-local autoSharkmanToggle = TabItem:CreateToggle({
-    Name = "Auto Sharkman Karate",
-    CurrentValue = false,
-    Flag = "AutoSharkman",
-    Callback = function(Value)
-        getgenv().Sharkman = Value
-    end
-})
-local autoElectricClawToggle = TabItem:CreateToggle({
-    Name = "Auto Electric Claw",
-    CurrentValue = false,
-    Flag = "AutoElectricClaw",
-    Callback = function(Value)
-        getgenv().ElectricClaw = Value
-    end
-})
-local autoDragonTalonToggle = TabItem:CreateToggle({
-    Name = "Auto Dragon Talon",
-    CurrentValue = false,
-    Flag = "AutoDragonTalon",
-    Callback = function(Value)
-        getgenv().DragonTalon = Value
-    end
-})
-local autoGodHumanToggle = TabItem:CreateToggle({
-    Name = "Auto GodHuman",
-    CurrentValue = false,
-    Flag = "AutoGodHuman",
-    Callback = function(Value)
-        getgenv().God_Human = Value
-    end
-})
-
--- Tab: Race & Mirage (only in World3)
-if game.PlaceId == 7449423635 then
-    local sectionMirage = TabRace:CreateSection("Mirage")
-    local mirageLabel = TabRace:CreateLabel("Check Mirage : Not Spawn")
-    task.spawn(function()
-        while true do
-            wait(1)
-            if Workspace._WorldOrigin.Locations:FindFirstChild("Mirage Island") then
-                mirageLabel:Set("Check Mirage : Spawn!")
-            else
-                mirageLabel:Set("Check Mirage : Not Spawn")
-            end
-        end
-    end)
-    local autoMysticIslandToggle = TabRace:CreateToggle({
-        Name = "Auto Mystic Island",
-        CurrentValue = false,
-        Flag = "AutoMysticIsland",
-        Callback = function(Value)
-            getgenv().MysticIsland = Value
-        end
-    })
-    local teleportNpcToggle = TabRace:CreateToggle({
-        Name = "Teleport Advanced Fruit Dealer",
-        CurrentValue = false,
-        Flag = "TeleportNPC",
-        Callback = function(Value)
-            getgenv().Miragenpc = Value
-        end
-    })
-    local lockCamToggle = TabRace:CreateToggle({
-        Name = "Auto Lock Moon",
-        CurrentValue = false,
-        Flag = "LockCam",
-        Callback = function(Value)
-            getgenv().LockCamToMoon = Value
-        end
-    })
-    local tweenGearToggle = TabRace:CreateToggle({
-        Name = "Tween Gear",
-        CurrentValue = false,
-        Flag = "TweenGear",
-        Callback = function(Value)
-            getgenv().TweenMGear = Value
-        end
-    })
-    local sectionRaceV4 = TabRace:CreateSection("Race V4")
-    local tpTopGreatTreeButton = TabRace:CreateButton({
-        Name = "Teleport To Top Of GreatTree",
-        Callback = function()
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("RaceV4Progress", "Teleport")
-            wait(0.1)
-            TP2(CFrame.new(28609.5801, 14896.5098, 105.869637))
-        end
-    })
-    local tpTempleTimeButton = TabRace:CreateButton({
-        Name = "Teleport To Temple Of Time",
-        Callback = function()
-            TP2(CFrame.new(28286, 14897, 103))
-        end
-    })
-    local tpLeverPullButton = TabRace:CreateButton({
-        Name = "Teleport To Lever Pull",
-        Callback = function()
-            TP2(CFrame.new(28575.181640625, 14936.6279296875, 72.31636810302734))
-        end
-    })
-    local tpAncientOneButton = TabRace:CreateButton({
-        Name = "Teleport To Ancient One",
-        Callback = function()
-            TP2(CFrame.new(28981.552734375, 14888.4267578125, -120.245849609375))
-        end
-    })
-    local clockAccessButton = TabRace:CreateButton({
-        Name = "Clock Access",
-        Callback = function()
-            Workspace.Map["Temple of Time"].DoNotEnter:Remove()
-            Workspace.Map["Temple of Time"].ClockRoomExit:Remove()
-        end
-    })
-    local autoBuyGearToggle = TabRace:CreateToggle({
-        Name = "Auto Buy Gear",
-        CurrentValue = false,
-        Flag = "AutoBuyGear",
-        Callback = function(Value)
-            getgenv().Bone4 = Value
-        end
-    })
-    local disableInfStairsToggle = TabRace:CreateToggle({
-        Name = "Disabled Inf Stairs",
-        CurrentValue = false,
-        Flag = "DisableInfStairs",
-        Callback = function(Value)
-            Player.Character.InfiniteStairs.Disabled = Value
-        end
-    })
-    local tpTrialDoorButton = TabRace:CreateButton({
-        Name = "Teleport Trial Door",
-        Callback = function()
-            TP2(CFrame.new(28286, 14897, 103))
-            wait(0.1)
-            TP2(CFrame.new(28286, 14897, 103))
-            wait(0.1)
-            TP2(CFrame.new(28286, 14897, 103))
-            wait(0.1)
-            TP2(CFrame.new(28286, 14897, 103))
-            local race = Player.Data.Race.Value
-            if race == "Fishman" then
-                TP2(CFrame.new(28224.056640625, 14889.4267578125, -210.5872039794922))
-            elseif race == "Human" then
-                TP2(CFrame.new(29237.294921875, 14889.4267578125, -206.94955444335938))
-            elseif race == "Cyborg" then
-                TP2(CFrame.new(28492.4140625, 14894.4267578125, -422.1100158691406))
-            elseif race == "Skypiea" then
-                TP2(CFrame.new(28967.408203125, 14918.0751953125, 234.31198120117188))
-            elseif race == "Ghoul" then
-                TP2(CFrame.new(28672.720703125, 14889.1279296875, 454.5961608886719))
-            elseif race == "Mink" then
-                TP2(CFrame.new(29020.66015625, 14889.4267578125, -379.2682800292969))
-            end
-        end
-    })
-    local tpClockButton = TabRace:CreateButton({
-        Name = "Teleport To Clock",
-        Callback = function()
-            TP2(CFrame.new(29551.9941, 15069.002, -85.5179291))
-        end
-    })
-    local autoTrialToggle = TabRace:CreateToggle({
-        Name = "Auto Trial",
-        CurrentValue = false,
-        Flag = "AutoTrial",
-        Callback = function(Value)
-            getgenv().QuestRace = Value
-        end
-    })
-    local autoV4Toggle = TabRace:CreateToggle({
-        Name = "Auto Farm & active V4",
-        CurrentValue = false,
-        Flag = "AutoV4",
-        Callback = function(Value)
-            getgenv().Bone = Value
-            getgenv().Bone4 = Value
-            getgenv().ActiveV4 = Value
-        end
-    })
-    local buyAncientOneButton = TabRace:CreateButton({
-        Name = "Buy Ancient One Quest",
-        Callback = function()
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("UpgradeRace", "Buy")
-        end
-    })
-    local sectionKillPlayer = TabRace:CreateSection("Kill Player Trial")
-    local weaponTrialDropdown = TabRace:CreateDropdown({
-        Name = "Select Weapon Kill Player Trial",
-        Options = {"Melee", "Sword", "Fruit", "Gun"},
-        CurrentOption = {"Melee"},
-        MultipleOptions = false,
-        Flag = "WeaponTrial",
-        Callback = function(Option)
-            getgenv().SelectWeaponTrial = Option[1]
-        end
-    })
-    local killAfterTrialToggle = TabRace:CreateToggle({
-        Name = "Kill Player After Trial",
-        CurrentValue = false,
-        Flag = "KillAfterTrial",
-        Callback = function(Value)
-            getgenv().KillAfterTrials = Value
-            getgenv().Click = Value
-            getgenv().TurnKen = Value
-            getgenv().AimNearest = Value
-            getgenv().Aimbot_Skill = Value
-        end
-    })
-    local skillTrialZToggle = TabRace:CreateToggle({
-        Name = "Use Skill Z Kill Player",
-        CurrentValue = false,
-        Flag = "SkillTrialZ",
-        Callback = function(Value)
-            getgenv().SkillTrialZ = Value
-        end
-    })
-    local skillTrialXToggle = TabRace:CreateToggle({
-        Name = "Use Skill X Kill Player",
-        CurrentValue = false,
-        Flag = "SkillTrialX",
-        Callback = function(Value)
-            getgenv().SkillTrialX = Value
-        end
-    })
-    local skillTrialCToggle = TabRace:CreateToggle({
-        Name = "Use Skill C Kill Player",
-        CurrentValue = false,
-        Flag = "SkillTrialC",
-        Callback = function(Value)
-            getgenv().SkillTrialC = Value
-        end
-    })
-    local skillTrialVToggle = TabRace:CreateToggle({
-        Name = "Use Skill V Kill Player",
-        CurrentValue = false,
-        Flag = "SkillTrialV",
-        Callback = function(Value)
-            getgenv().SkillTrialV = Value
-        end
-    })
-    local skillTrialFToggle = TabRace:CreateToggle({
-        Name = "Use Skill F Kill Player",
-        CurrentValue = false,
-        Flag = "SkillTrialF",
-        Callback = function(Value)
-            getgenv().SkillTrialF = Value
-        end
-    })
-end
-
--- Tab: Sea Event
-if game.PlaceId == 7449423635 then
-    local sectionSea = TabSeaEvent:CreateSection("Sea Events")
-    local removeFogButton = TabSeaEvent:CreateButton({
-        Name = "Remove Fog",
-        Callback = function()
-            Lighting.LightingLayers:Destroy()
-            Lighting.Sky:Destroy()
-        end
-    })
-    local boatDropdown = TabSeaEvent:CreateDropdown({
-        Name = "Select Boat",
-        Options = {"Guardian", "PirateGrandBrigade", "MarineGrandBrigade", "PirateBrigade", "MarineBrigade", "PirateSloop", "MarineSloop", "BeastHunter"},
-        CurrentOption = {"PirateGrandBrigade"},
-        MultipleOptions = false,
-        Flag = "BoatSelect",
-        Callback = function(Option)
-            getgenv().SelectedBoat = Option[1]
-        end
-    })
-    local zoneDropdown = TabSeaEvent:CreateDropdown({
-        Name = "Select Zone",
-        Options = {"Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5", "Zone 6"},
-        CurrentOption = {"Zone 5"},
-        MultipleOptions = false,
-        Flag = "ZoneSelect",
-        Callback = function(Option)
-            getgenv().SelectedZone = Option[1]
-        end
-    })
-    local speedBoatDropdown = TabSeaEvent:CreateDropdown({
-        Name = "Speed Tween Boat",
-        Options = {"180", "200", "250", "300", "325", "350"},
-        CurrentOption = {"300"},
-        MultipleOptions = false,
-        Flag = "SpeedBoat",
-        Callback = function(Option)
-            getgenv().SpeedBoat = Option[1]
-        end
-    })
-    local startSeaEventToggle = TabSeaEvent:CreateToggle({
-        Name = "Start Sea Event",
-        CurrentValue = false,
-        Flag = "StartSeaEvent",
-        Callback = function(Value)
-            getgenv().SailBoat = Value
-        end
-    })
-    local autoKillSharkToggle = TabSeaEvent:CreateToggle({
-        Name = "Auto Kill Shark",
-        CurrentValue = false,
-        Flag = "AutoKillShark",
-        Callback = function(Value)
-            getgenv().FarmShark = Value
-        end
-    })
-    local autoKillPiranhaToggle = TabSeaEvent:CreateToggle({
-        Name = "Auto Kill Piranha",
-        CurrentValue = false,
-        Flag = "AutoKillPiranha",
-        Callback = function(Value)
-            getgenv().farmpiranya = Value
-        end
-    })
-    local autoFishCrewToggle = TabSeaEvent:CreateToggle({
-        Name = "Auto Fish Crew",
-        CurrentValue = false,
-        Flag = "AutoFishCrew",
-        Callback = function(Value)
-            getgenv().Fish_Crew_Member = Value
-        end
-    })
-    local autoGhostShipToggle = TabSeaEvent:CreateToggle({
-        Name = "Auto Kill Ghost Ship",
-        CurrentValue = false,
-        Flag = "AutoGhostShip",
-        Callback = function(Value)
-            getgenv().KillGhostShip = Value
-        end
-    })
-    local autoTerrorSharkToggle = TabSeaEvent:CreateToggle({
-        Name = "Auto Kill Terror Shark",
-        CurrentValue = false,
-        Flag = "AutoTerrorShark",
-        Callback = function(Value)
-            getgenv().Terrorshark = Value
-        end
-    })
-    local autoSeaBeastToggle = TabSeaEvent:CreateToggle({
-        Name = "Auto Kill Sea Beast",
-        CurrentValue = false,
-        Flag = "AutoSeaBeast",
-        Callback = function(Value)
-            getgenv().SeaBest = Value
-        end
-    })
-    local brightnessDropdown = TabSeaEvent:CreateDropdown({
-        Name = "Select Brightness",
-        Options = {"100", "150", "200", "250", "300", "325", "350"},
-        CurrentOption = {"100"},
-        MultipleOptions = false,
-        Flag = "Brightness",
-        Callback = function(Option)
-            getgenv().BrightValue = Option[1]
-        end
-    })
-    local setBrightnessButton = TabSeaEvent:CreateButton({
-        Name = "Set Brightness",
-        Callback = function()
-            Lighting.Brightness = getgenv().BrightValue
-        end
-    })
-    local speedBoatEnableToggle = TabSeaEvent:CreateToggle({
-        Name = "Enable Speed Boat",
-        CurrentValue = false,
-        Flag = "SpeedBoatEnable",
-        Callback = function(Value)
-            getgenv().IncreaseBoatSpeed = Value
-        end
-    })
-    local flyBoatToggle = TabSeaEvent:CreateToggle({
-        Name = "Enable Fly Boat",
-        CurrentValue = false,
-        Flag = "FlyBoat",
-        Callback = function(Value)
-            if Value then
-                -- fly function
-            else
-                -- stop fly
-            end
-        end
-    })
-    local noClipRockToggle = TabSeaEvent:CreateToggle({
-        Name = "NoClip Rock",
-        CurrentValue = false,
-        Flag = "NoClipRock",
-        Callback = function(Value)
-            getgenv().NoClipRock = Value
-        end
-    })
-    local pressWAutoToggle = TabSeaEvent:CreateToggle({
-        Name = "Press W Auto",
-        CurrentValue = false,
-        Flag = "PressWAuto",
-        Callback = function(Value)
-            getgenv().r71PressW = Value
-        end
-    })
-    local sectionSkillSea = TabSeaEvent:CreateSection("Settings Skills Only Sea Event")
-    local enableMeleeSkillToggle = TabSeaEvent:CreateToggle({
-        Name = "Enable Melee Skill",
-        CurrentValue = false,
-        Flag = "EnableMeleeSkill",
-        Callback = function(Value)
-            getgenv().UseSeaMeleeSkill = Value
-        end
-    })
-    local enableFruitSkillToggle = TabSeaEvent:CreateToggle({
-        Name = "Enable Fruit Skill",
-        CurrentValue = false,
-        Flag = "EnableFruitSkill",
-        Callback = function(Value)
-            getgenv().UseSeaFruitSkill = Value
-        end
-    })
-    local enableSwordSkillToggle = TabSeaEvent:CreateToggle({
-        Name = "Enable Sword Skill",
-        CurrentValue = false,
-        Flag = "EnableSwordSkill",
-        Callback = function(Value)
-            getgenv().UseSeaSwordSkill = Value
-        end
-    })
-    local enableGunSkillToggle = TabSeaEvent:CreateToggle({
-        Name = "Enable Gun Skill",
-        CurrentValue = false,
-        Flag = "EnableGunSkill",
-        Callback = function(Value)
-            getgenv().UseSeaGunSkill = Value
-        end
-    })
-end
-
--- Tab: Local Player
-local sectionPlayers = TabLocal:CreateSection("Players")
-local playerCountLabel = TabLocal:CreateLabel("Players: 0/12")
-task.spawn(function()
-    while true do
-        wait(1)
-        local count = #Players:GetPlayers()
-        playerCountLabel:Set("Players: " .. count .. "/12")
-    end
-end)
-local playerDropdown = TabLocal:CreateDropdown({
-    Name = "Select Player",
-    Options = {},
-    CurrentOption = {},
-    MultipleOptions = false,
-    Flag = "PlayerSelect",
-    Callback = function(Option)
-        getgenv().SelectPly = Option[1]
-    end
-})
-local refreshPlayersButton = TabLocal:CreateButton({
-    Name = "Refresh Player",
-    Callback = function()
-        local options = {}
-        for _, plr in pairs(Players:GetPlayers()) do
-            table.insert(options, plr.Name)
-        end
-        playerDropdown:SetOptions(options)
-    end
-})
-local spectateToggle = TabLocal:CreateToggle({
-    Name = "Spectate Player",
-    CurrentValue = false,
-    Flag = "Spectate",
-    Callback = function(Value)
-        getgenv().SpectatePlys = Value
-        if Value then
-            local target = Players:FindFirstChild(getgenv().SelectPly)
-            if target and target.Character then
-                Workspace.Camera.CameraSubject = target.Character.Humanoid
-            end
-        else
-            Workspace.Camera.CameraSubject = Player.Character.Humanoid
-        end
-    end
-})
-local teleportToPlayerToggle = TabLocal:CreateToggle({
-    Name = "Teleport",
-    CurrentValue = false,
-    Flag = "TeleportToPlayer",
-    Callback = function(Value)
-        getgenv().TeleportPly = Value
-        task.spawn(function()
-            while getgenv().TeleportPly do
-                local target = Players:FindFirstChild(getgenv().SelectPly)
-                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-                    TP2(target.Character.HumanoidRootPart.CFrame)
-                end
-                wait(0.1)
-            end
-        end)
-    end
-})
-local sectionQuestPlayer = TabLocal:CreateSection("Quest Player")
-local getEliteQuestButton = TabLocal:CreateButton({
-    Name = "Get Quest Elite Players",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("PlayerHunter")
-    end
-})
-local autoKillPlayerQuestToggle = TabLocal:CreateToggle({
-    Name = "Auto Kill Player Quest",
-    CurrentValue = false,
-    Flag = "AutoKillPlayerQuest",
-    Callback = function(Value)
-        getgenv().PlayerHunter = Value
-    end
-})
-local sectionPvP = TabLocal:CreateSection("PvP")
-local aimbotNearestToggle = TabLocal:CreateToggle({
-    Name = "Aimbot Nearest",
-    CurrentValue = false,
-    Flag = "AimbotNearest",
-    Callback = function(Value)
-        getgenv().AimNearest = Value
-    end
-})
-local enablePvPToggle = TabLocal:CreateToggle({
-    Name = "Enabled PvP",
-    CurrentValue = false,
-    Flag = "EnablePvP",
-    Callback = function(Value)
-        getgenv().EnabledPvP = Value
-    end
-})
-local setSpawnButton = TabLocal:CreateButton({
-    Name = "Set Position Spawn",
-    Callback = function()
-        getgenv().Pos_Spawn = Player.Character.HumanoidRootPart.CFrame
-    end
-})
-local safeModeToggle = TabLocal:CreateToggle({
-    Name = "Safe Mode",
-    CurrentValue = false,
-    Flag = "SafeMode",
-    Callback = function(Value)
-        getgenv().Safe_Mode = Value
-    end
-})
-local respawnButton = TabLocal:CreateButton({
-    Name = "Respawn",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Pirates")
-    end
-})
-local sectionOtherPlayers = TabLocal:CreateSection("Other Players")
-local autoActiveV3Toggle = TabLocal:CreateToggle({
-    Name = "Auto Active V3",
-    CurrentValue = false,
-    Flag = "AutoActiveV3",
-    Callback = function(Value)
-        getgenv().ActiveV3 = Value
-    end
-})
-local autoActiveV4Toggle = TabLocal:CreateToggle({
-    Name = "Auto Active V4",
-    CurrentValue = false,
-    Flag = "AutoActiveV4",
-    Callback = function(Value)
-        getgenv().ActiveV4 = Value
-    end
-})
-local flyToggle = TabLocal:CreateToggle({
-    Name = "Enable Fly",
+-- Fly
+local flyEnabled = false
+local flyBodyVelocity = nil
+local flyConnection = nil
+PlayerTab:CreateToggle({
+    Name = "Bay (WASD + Space/Shift)",
     CurrentValue = false,
     Flag = "Fly",
-    Callback = function(Value)
-        getgenv().NoClip = Value
-        if Value then
-            -- fly function
+    Callback = function(State)
+        flyEnabled = State
+        if State then
+            local root = GetRootPart()
+            if not root then return end
+            flyBodyVelocity = Instance.new("BodyVelocity")
+            flyBodyVelocity.Velocity = Vector3.new(0,0,0)
+            flyBodyVelocity.MaxForce = Vector3.new(4000,4000,4000)
+            flyBodyVelocity.Parent = root
+            if flyConnection then flyConnection:Disconnect() end
+            flyConnection = RunService.Heartbeat:Connect(function()
+                if not flyEnabled or not flyBodyVelocity or not flyBodyVelocity.Parent then
+                    if flyBodyVelocity then flyBodyVelocity:Destroy() end
+                    return
+                end
+                local move = Vector3.new(0,0,0)
+                if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + Vector3.new(0,0,-1) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move + Vector3.new(0,0,1) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move + Vector3.new(-1,0,0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + Vector3.new(1,0,0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0,1,0) end
+                if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move = move + Vector3.new(0,-1,0) end
+                if move.Magnitude > 0 then
+                    flyBodyVelocity.Velocity = move.Unit * 60
+                else
+                    flyBodyVelocity.Velocity = Vector3.new(0,0,0)
+                end
+            end)
         else
-            -- stop fly
+            if flyBodyVelocity then flyBodyVelocity:Destroy() end
+            if flyConnection then flyConnection:Disconnect() end
         end
     end
 })
-local walkWaterToggle = TabLocal:CreateToggle({
-    Name = "Walk on Water",
-    CurrentValue = true,
-    Flag = "WalkWater",
-    Callback = function(Value)
-        getgenv().WalkWater = Value
-        Workspace.Map["WaterBase-Plane"].Size = Value and Vector3.new(1000, 112, 1000) or Vector3.new(1000, 80, 1000)
-    end
-})
-local noClipToggle = TabLocal:CreateToggle({
-    Name = "NoClip",
+
+-- Noclip
+local noclipEnabled = false
+PlayerTab:CreateToggle({
+    Name = "Noclip (xuyên tường)",
     CurrentValue = false,
-    Flag = "NoClip",
-    Callback = function(Value)
-        getgenv().NoClip = Value
+    Flag = "Noclip",
+    Callback = function(State)
+        noclipEnabled = State
     end
 })
-local sectionStats = TabLocal:CreateSection("Stats")
-local statPointsLabel = TabLocal:CreateLabel("Stat Points: 0")
-local meleeStatLabel = TabLocal:CreateLabel("Melee: 0")
-local defenseStatLabel = TabLocal:CreateLabel("Defense: 0")
-local swordStatLabel = TabLocal:CreateLabel("Sword: 0")
-local gunStatLabel = TabLocal:CreateLabel("Gun: 0")
-local fruitStatLabel = TabLocal:CreateLabel("Fruit: 0")
-task.spawn(function()
-    while true do
-        wait(1)
-        statPointsLabel:Set("Stat Points: " .. Player.Data.Points.Value)
-        meleeStatLabel:Set("Melee: " .. Player.Data.Stats.Melee.Level.Value)
-        defenseStatLabel:Set("Defense: " .. Player.Data.Stats.Defense.Level.Value)
-        swordStatLabel:Set("Sword: " .. Player.Data.Stats.Sword.Level.Value)
-        gunStatLabel:Set("Gun: " .. Player.Data.Stats.Gun.Level.Value)
-        fruitStatLabel:Set("Fruit: " .. Player.Data.Stats["Demon Fruit"].Level.Value)
+RunService.Stepped:Connect(function()
+    if noclipEnabled then
+        local c = GetCharacter()
+        if c then
+            for _, part in ipairs(c:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end
     end
 end)
-local pointAmountDropdown = TabLocal:CreateDropdown({
-    Name = "Select Stats Kaitun",
-    Options = {"1", "10", "100", "1000"},
-    CurrentOption = {"1"},
-    MultipleOptions = false,
-    Flag = "PointAmount",
-    Callback = function(Option)
-        getgenv().Point = Option[1]
-    end
-})
-local autoStatsKaitunToggle = TabLocal:CreateToggle({
-    Name = "Auto Stats Kaitun",
-    CurrentValue = false,
-    Flag = "AutoStatsKaitun",
-    Callback = function(Value)
-        getgenv().Stats_Kaitun = Value
-    end
-})
-local meleeStatToggle = TabLocal:CreateToggle({
-    Name = "Melee",
-    CurrentValue = false,
-    Flag = "MeleeStat",
-    Callback = function(Value)
-        getgenv().melee = Value
-    end
-})
-local defenseStatToggle = TabLocal:CreateToggle({
-    Name = "Defense",
-    CurrentValue = false,
-    Flag = "DefenseStat",
-    Callback = function(Value)
-        getgenv().defense = Value
-    end
-})
-local swordStatToggle = TabLocal:CreateToggle({
-    Name = "Sword",
-    CurrentValue = false,
-    Flag = "SwordStat",
-    Callback = function(Value)
-        getgenv().sword = Value
-    end
-})
-local gunStatToggle = TabLocal:CreateToggle({
-    Name = "Gun",
-    CurrentValue = false,
-    Flag = "GunStat",
-    Callback = function(Value)
-        getgenv().gun = Value
-    end
-})
-local fruitStatToggle = TabLocal:CreateToggle({
-    Name = "Devil Fruit",
-    CurrentValue = false,
-    Flag = "FruitStat",
-    Callback = function(Value)
-        getgenv().demonfruit = Value
-    end
-})
 
--- Tab: Visuals
-local sectionESP = TabVisual:CreateSection("ESP MENU")
-local espPlayerToggle = TabVisual:CreateToggle({
-    Name = "ESP Player",
-    CurrentValue = false,
-    Flag = "ESPPlayer",
-    Callback = function(Value)
-        getgenv().ESPPlayer = Value
-        -- UpdatePlayerChams()
-    end
-})
-local espChestToggle = TabVisual:CreateToggle({
-    Name = "ESP Chest",
-    CurrentValue = false,
-    Flag = "ESPChest",
-    Callback = function(Value)
-        getgenv().ChestESP = Value
-    end
-})
-local espFruitToggle = TabVisual:CreateToggle({
-    Name = "ESP Fruit",
-    CurrentValue = false,
-    Flag = "ESPFruit",
-    Callback = function(Value)
-        getgenv().DevilFruitESP = Value
-    end
-})
-local espRealFruitToggle = TabVisual:CreateToggle({
-    Name = "ESP Real Fruit",
-    CurrentValue = false,
-    Flag = "ESPRealFruit",
-    Callback = function(Value)
-        getgenv().RealFruitESP = Value
-    end
-})
-local espFlowerToggle = TabVisual:CreateToggle({
-    Name = "ESP Flower",
-    CurrentValue = false,
-    Flag = "ESPFlower",
-    Callback = function(Value)
-        getgenv().FlowerESP = Value
-    end
-})
-local espIslandToggle = TabVisual:CreateToggle({
-    Name = "ESP Island",
-    CurrentValue = false,
-    Flag = "ESPIsland",
-    Callback = function(Value)
-        getgenv().IslandESP = Value
-    end
-})
-local espMysticToggle = TabVisual:CreateToggle({
-    Name = "Esp Mystic Island",
-    CurrentValue = false,
-    Flag = "ESPMystic",
-    Callback = function(Value)
-        getgenv().MirageIslandESP = Value
-    end
-})
+-- ================================================================
+-- TAB CHIẾN ĐẤU
+-- ================================================================
+local CombatSection = CombatTab:CreateSection("Tự động chiến đấu")
 
-local sectionTroll = TabVisual:CreateSection("Troll")
-local rainFruitButton = TabVisual:CreateButton({
-    Name = "Rain Fruit",
-    Callback = function()
-        -- rain fruit function
-    end
-})
-local instantLevelButton = TabVisual:CreateButton({
-    Name = "Instant Level/Beli/EXP",
-    Callback = function()
-        Player.Data.Exp.Value = 999999999999
-        Player.Data.Beli.Value = Player.Data.Beli.Value + 999999999999
-        while Player.Data.Exp.Value - require(ReplicatedStorage:WaitForChild("EXPFunction"))(Player.Data.Level.Value) > 0 do
-            Player.Data.Exp.Value = Player.Data.Exp.Value - require(ReplicatedStorage:WaitForChild("EXPFunction"))(Player.Data.Level.Value)
-            Player.Data.Level.Value = Player.Data.Level.Value + 1
-            Player.Data.Points.Value = Player.Data.Points.Value + 3
-            -- level up effect
-        end
-    end
-})
-local fakeLevelInput = TabVisual:CreateInput({
-    Name = "Fake Level",
-    PlaceholderText = "Enter level",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        Player.Data.Level.Value = tonumber(Text)
-    end
-})
-local fakeExpInput = TabVisual:CreateInput({
-    Name = "Fake Exp",
-    PlaceholderText = "Enter exp",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        Player.Data.Exp.Value = tonumber(Text)
-    end
-})
-local fakeMoneyInput = TabVisual:CreateInput({
-    Name = "Fake Money",
-    PlaceholderText = "Enter money",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        Player.Data.Beli.Value = tonumber(Text)
-    end
-})
-local fakeFragmentInput = TabVisual:CreateInput({
-    Name = "Fake Fragment",
-    PlaceholderText = "Enter fragments",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        Player.Data.Fragments.Value = tonumber(Text)
-    end
-})
-local fakePointsInput = TabVisual:CreateInput({
-    Name = "Fake Points",
-    PlaceholderText = "Enter points",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        Player.Data.Points.Value = tonumber(Text)
-    end
-})
-local fakeBountyInput = TabVisual:CreateInput({
-    Name = "Fake Bounty",
-    PlaceholderText = "Enter bounty",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        Player.leaderstats["Bounty/Honor"].Value = tonumber(Text)
-    end
-})
-local sectionHighlight = TabVisual:CreateSection("Highlight")
-local showChatToggle = TabVisual:CreateToggle({
-    Name = "Show Chat disabled",
+-- Auto Click
+local autoClickEnabled = false
+local autoClickThread = nil
+CombatTab:CreateToggle({
+    Name = "Auto Click (liên tục)",
     CurrentValue = false,
-    Flag = "ShowChat",
-    Callback = function(Value)
-        getgenv().chat = Value
-        CoreGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, not Value)
-    end
-})
-local showLeaderboardToggle = TabVisual:CreateToggle({
-    Name = "Show leaderboard disabled",
-    CurrentValue = false,
-    Flag = "ShowLeaderboard",
-    Callback = function(Value)
-        getgenv().leaderboard = Value
-        CoreGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not Value)
-    end
-})
-local sectionHack = TabVisual:CreateSection("Hack")
-local unlockBusoButton = TabVisual:CreateButton({
-    Name = "Unlock Buso",
-    Callback = function()
-        CollectionService:AddTag(Player.Character, "Buso")
-    end
-})
-local unlockSoruButton = TabVisual:CreateButton({
-    Name = "Unlock Soru",
-    Callback = function()
-        CollectionService:AddTag(Player.Character, "Soru")
-    end
-})
-local unlockGeppoButton = TabVisual:CreateButton({
-    Name = "Unlock Geppo",
-    Callback = function()
-        CollectionService:AddTag(Player.Character, "Geppo")
-    end
-})
-local maxZoomButton = TabVisual:CreateButton({
-    Name = "Max Zoom",
-    Callback = function()
-        Player.CameraMaxZoomDistance = math.huge
-    end
-})
-local kaitunCapButton = TabVisual:CreateButton({
-    Name = "Kaitun Cap",
-    Callback = function()
-        -- kaitun cap function
-    end
-})
-local sectionGraphic = TabVisual:CreateSection("Graphic")
-local removeFogButton2 = TabVisual:CreateButton({
-    Name = "Remove Fog (Sea 3)",
-    Callback = function()
-        Lighting.LightingLayers:Destroy()
-        Lighting.Sky:Destroy()
-    end
-})
-local removeFogToggle = TabVisual:CreateToggle({
-    Name = "Remove Fog",
-    CurrentValue = false,
-    Flag = "RemoveFog",
-    Callback = function(Value)
-        getgenv().RemoveFog = Value
-        task.spawn(function()
-            while getgenv().RemoveFog do
-                Lighting.FogEnd = 8999999488
-                wait()
-            end
-        end)
-    end
-})
-local removeDamageToggle = TabVisual:CreateToggle({
-    Name = "Remove Damage",
-    CurrentValue = true,
-    Flag = "RemoveDamage",
-    Callback = function(Value)
-        if Value then
-            for _, v in pairs(Workspace:GetDescendants()) do
-                if v.Name == "DamageCounter" then v:Destroy() end
-            end
-            for _, v in pairs(ReplicatedStorage:GetDescendants()) do
-                if v.Name == "DamageCounter" then v:Destroy() end
-            end
-        end
-    end
-})
-local unlockFPSButton = TabVisual:CreateButton({
-    Name = "Unlock FPS",
-    Callback = function()
-        setfpscap(9999999)
-    end
-})
-local sectionAbilities = TabVisual:CreateSection("Abilities")
-local dodgeNoCooldownToggle = TabVisual:CreateToggle({
-    Name = "Dodge No Cooldown",
-    CurrentValue = false,
-    Flag = "DodgeNoCooldown",
-    Callback = function(Value)
-        getgenv().nododgecool = Value
-    end
-})
-local infiniteEnergyToggle = TabVisual:CreateToggle({
-    Name = "Infinite Energy",
-    CurrentValue = false,
-    Flag = "InfiniteEnergy",
-    Callback = function(Value)
-        getgenv().InfiniteEnergy = Value
-    end
-})
-local infiniteAbilityToggle = TabVisual:CreateToggle({
-    Name = "Infinite Ability",
-    CurrentValue = false,
-    Flag = "InfiniteAbility",
-    Callback = function(Value)
-        getgenv().InfAbility = Value
-    end
-})
-local infiniteObRangeToggle = TabVisual:CreateToggle({
-    Name = "Infinite Observation Range",
-    CurrentValue = false,
-    Flag = "InfiniteObRange",
-    Callback = function(Value)
-        getgenv().InfiniteObRange = Value
-        task.spawn(function()
-            while getgenv().InfiniteObRange do
-                Player.VisionRadius.Value = math.huge
-                wait()
-            end
-        end)
-    end
-})
-local infiniteGeppoToggle = TabVisual:CreateToggle({
-    Name = "Infinite Geppo",
-    CurrentValue = false,
-    Flag = "InfiniteGeppo",
-    Callback = function(Value)
-        getgenv().InfGeppo = Value
-    end
-})
-local infiniteSoruToggle = TabVisual:CreateToggle({
-    Name = "Infinite Soru",
-    CurrentValue = false,
-    Flag = "InfiniteSoru",
-    Callback = function(Value)
-        getgenv().Infsoru = Value
-    end
-})
-local removeLavaButton = TabVisual:CreateButton({
-    Name = "Remove Lava",
-    Callback = function()
-        for _, v in pairs(Workspace:GetDescendants()) do
-            if v.Name == "Lava" then v:Destroy() end
-        end
-    end
-})
-
--- Tab: Raid
-local sectionRaid = TabRaid:CreateSection("Raid")
-local raidChipDropdown = TabRaid:CreateDropdown({
-    Name = "Select Chips",
-    Options = require(ReplicatedStorage.Raids).raids,
-    CurrentOption = {"Flame"},
-    MultipleOptions = false,
-    Flag = "RaidChip",
-    Callback = function(Option)
-        getgenv().SelectChip = Option[1]
-    end
-})
-local autoSelectDungeonToggle = TabRaid:CreateToggle({
-    Name = "Auto Select Dungeon",
-    CurrentValue = false,
-    Flag = "AutoSelectDungeon",
-    Callback = function(Value)
-        getgenv().SelectDungeon = Value
-    end
-})
-local autoBuyChipToggle = TabRaid:CreateToggle({
-    Name = "Auto Buy Chip",
-    CurrentValue = false,
-    Flag = "AutoBuyChip",
-    Callback = function(Value)
-        getgenv().BuyChip = Value
-    end
-})
-local buyChipButton = TabRaid:CreateButton({
-    Name = "Buy Chip Select",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("RaidsNpc", "Select", getgenv().SelectChip)
-    end
-})
-local autoStartRaidToggle = TabRaid:CreateToggle({
-    Name = "Auto Start Go To Dungeon",
-    CurrentValue = false,
-    Flag = "AutoStartRaid",
-    Callback = function(Value)
-        getgenv().StartRaid = Value
-    end
-})
-local startRaidButton = TabRaid:CreateButton({
-    Name = "Start Go To Dungeon",
-    Callback = function()
-        if game.PlaceId == 4442272183 then
-            fireclickdetector(Workspace.Map.CircleIsland.RaidSummon2.Button.Main.ClickDetector)
-        elseif game.PlaceId == 7449423635 then
-            fireclickdetector(Workspace.Map["Boat Castle"].RaidSummon2.Button.Main.ClickDetector)
-        end
-    end
-})
-local nextIslandButton = TabRaid:CreateButton({
-    Name = "Next Island",
-    Callback = function()
-        for i = 5, 1, -1 do
-            local island = Workspace._WorldOrigin.Locations:FindFirstChild("Island " .. i)
-            if island then
-                TP2(island.CFrame * CFrame.new(0, 70, 100))
-                break
-            end
-        end
-    end
-})
-local autoNextIslandToggle = TabRaid:CreateToggle({
-    Name = "Auto Next Island",
-    CurrentValue = false,
-    Flag = "AutoNextIsland",
-    Callback = function(Value)
-        getgenv().Dungeon = Value
-    end
-})
-local killAuraToggle = TabRaid:CreateToggle({
-    Name = "Kill Aura",
-    CurrentValue = false,
-    Flag = "KillAura",
-    Callback = function(Value)
-        getgenv().Kill_Aura = Value
-    end
-})
-local autoAwakenerToggle = TabRaid:CreateToggle({
-    Name = "Auto Awakener",
-    CurrentValue = false,
-    Flag = "AutoAwakener",
-    Callback = function(Value)
-        getgenv().Awakener = Value
-    end
-})
-local tpLabButton = TabRaid:CreateButton({
-    Name = "Teleport to Lab",
-    Callback = function()
-        if game.PlaceId == 4442272183 then
-            TP2(CFrame.new(-6438.73535, 250.645355, -4501.50684))
-        elseif game.PlaceId == 7449423635 then
-            TP2(CFrame.new(-5017.40869, 314.844055, -2823.0127))
-        end
-    end
-})
-local tpAwakeningRoomButton = TabRaid:CreateButton({
-    Name = "Awakening Room",
-    Callback = function()
-        if game.PlaceId == 4442272183 then
-            TP2(CFrame.new(266.227783, 1.39509034, 1857.00732))
-        elseif game.PlaceId == 7449423635 then
-            TP2(CFrame.new(-11571.440429688, 49.172668457031, -7574.7368164062))
-        end
-    end
-})
-local sectionLawSword = TabRaid:CreateSection("Misc KoKo Sword")
-local autoLawToggle = TabRaid:CreateToggle({
-    Name = "Auto Law",
-    CurrentValue = false,
-    Flag = "AutoLaw",
-    Callback = function(Value)
-        getgenv().OderSword = Value
-    end
-})
-local autoLawHopToggle = TabRaid:CreateToggle({
-    Name = "Auto Law Hop",
-    CurrentValue = false,
-    Flag = "AutoLawHop",
-    Callback = function(Value)
-        getgenv().OderSwordHop = Value
-    end
-})
-local buyMicrochipButton = TabRaid:CreateButton({
-    Name = "Buy Microchip Law Boss",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Microchip", "2")
-    end
-})
-local startRaidLawButton = TabRaid:CreateButton({
-    Name = "Start Go To Raid Law Boss",
-    Callback = function()
-        if game.PlaceId == 4442272183 then
-            fireclickdetector(Workspace.Map.CircleIsland.RaidSummon.Button.Main.ClickDetector)
-        end
-    end
-})
-
--- Tab: Teleport
-local sectionWorld = TabTeleport:CreateSection("World")
-local tpOldWorldButton = TabTeleport:CreateButton({
-    Name = "Teleport To Old World",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("TravelMain")
-    end
-})
-local tpSecondSeaButton = TabTeleport:CreateButton({
-    Name = "Teleport To Second Sea",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("TravelDressrosa")
-    end
-})
-local tpThirdSeaButton = TabTeleport:CreateButton({
-    Name = "Teleport To Third Sea",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("TravelZou")
-    end
-})
-local sectionFast = TabTeleport:CreateSection("Teleport Fast")
-local fastIslandDropdown = TabTeleport:CreateDropdown({
-    Name = "Select Island",
-    Options = {"Sky Island 1", "Sky Island 2", "Under Water Island", "Under Water Island Entrace", "Flamingo Mansion", "Flamingo Room", "Cursed Ship", "Zombie Island", "Mansion", "Hydra Island", "Castle on the Sea", "Floating Turtle", "Beautiful Pirate"},
-    CurrentOption = {"Sky Island 1"},
-    MultipleOptions = false,
-    Flag = "FastIsland",
-    Callback = function(Option)
-        getgenv().SelectFast = Option[1]
-    end
-})
-local teleportFastToggle = TabTeleport:CreateToggle({
-    Name = "Teleport Fast",
-    CurrentValue = false,
-    Flag = "TeleportFast",
-    Callback = function(Value)
-        getgenv().TeleFast = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().TeleFast do
-                    local select = getgenv().SelectFast
-                    if select == "Sky Island 1" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-4652, 873, -1754))
-                    elseif select == "Sky Island 2" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-7895, 5547, -380))
-                    elseif select == "Under Water Island" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(61164, 5, 1820))
-                    elseif select == "Under Water Island Entrace" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(3865, 5, -1926))
-                    elseif select == "Flamingo Mansion" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-317, 331, 597))
-                    elseif select == "Flamingo Room" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(2283, 15, 867))
-                    elseif select == "Cursed Ship" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(923, 125, 32853))
-                    elseif select == "Zombie Island" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-6509, 83, -133))
-                    elseif select == "Mansion" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-12471, 374, -7551))
-                    elseif select == "Hydra Island" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(5756, 610, -282))
-                    elseif select == "Castle on the Sea" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-5092, 315, -3130))
-                    elseif select == "Floating Turtle" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(-12001, 332, -8861))
-                    elseif select == "Beautiful Pirate" then
-                        ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", Vector3.new(5319, 23, -93))
-                    end
-                    wait(0.5)
+    Flag = "AutoClick",
+    Callback = function(State)
+        autoClickEnabled = State
+        if State then
+            autoClickThread = task.spawn(function()
+                while autoClickEnabled do
+                    pcall(function()
+                        VirtualUser:ClickButton1()
+                    end)
+                    task.wait(0.05)
                 end
             end)
-        end
-    end
-})
-local sectionIsland = TabTeleport:CreateSection("Island")
-local islandDropdown = TabTeleport:CreateDropdown({
-    Name = "Select Island",
-    Options = {"WindMill", "Marine", "Middle Town", "Jungle", "Pirate Village", "Desert", "Snow Island", "MarineFord", "Colosseum", "Sky Island 1", "Sky Island 2", "Sky Island 3", "Prison", "Magma Village", "Under Water Island", "Fountain City", "The Cafe", "Frist Spot", "Dark Area", "Flamingo Mansion", "Flamingo Room", "Green Zone", "Zombie Island", "Two Snow Mountain", "Punk Hazard", "Cursed Ship", "Ice Castle", "Forgotten Island", "Ussop Island", "Mansion", "Port Town", "Castle On The Sea", "Hydra Island", "Great Tree", "Floating Turtle", "Haunted Castle", "Ice Cream Island", "Peanut Island", "Cake Island", "Candy Cane Island", "Tiki Outpost"},
-    CurrentOption = {"Middle Town"},
-    MultipleOptions = false,
-    Flag = "IslandSelect",
-    Callback = function(Option)
-        getgenv().SelectIsland = Option[1]
-    end
-})
-local teleportIslandToggle = TabTeleport:CreateToggle({
-    Name = "Teleport",
-    CurrentValue = false,
-    Flag = "TeleportIsland",
-    Callback = function(Value)
-        getgenv().TeleportIsland = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().TeleportIsland do
-                    local select = getgenv().SelectIsland
-                    if select == "Middle Town" then
-                        TP2(CFrame.new(-688, 15, 1585))
-                    elseif select == "MarineFord" then
-                        TP2(CFrame.new(-4810, 21, 4359))
-                    elseif select == "Marine" then
-                        TP2(CFrame.new(-2728, 25, 2056))
-                    elseif select == "WindMill" then
-                        TP2(CFrame.new(889, 17, 1434))
-                    elseif select == "Desert" then
-                        TP2(CFrame.new(945, 21, 4375))
-                    elseif select == "Snow Island" then
-                        TP2(CFrame.new(1298, 87, -1344))
-                    elseif select == "Pirate Village" then
-                        TP2(CFrame.new(-1173, 45, 3837))
-                    elseif select == "Jungle" then
-                        TP2(CFrame.new(-1614, 37, 146))
-                    elseif select == "Prison" then
-                        TP2(CFrame.new(4870, 6, 736))
-                    elseif select == "Under Water Island" then
-                        TP2(CFrame.new(61164, 5, 1820))
-                    elseif select == "Colosseum" then
-                        TP2(CFrame.new(-1535, 7, -3014))
-                    elseif select == "Magma Village" then
-                        TP2(CFrame.new(-5290, 9, 8349))
-                    elseif select == "Sky Island 1" then
-                        TP2(CFrame.new(-4814, 718, -2551))
-                    elseif select == "Sky Island 2" then
-                        TP2(CFrame.new(-4652, 873, -1754))
-                    elseif select == "Sky Island 3" then
-                        TP2(CFrame.new(-7895, 5547, -380))
-                    elseif select == "Fountain City" then
-                        TP2(CFrame.new(5128, 60, 4106))
-                    elseif select == "The Cafe" then
-                        TP2(CFrame.new(-382, 73, 290))
-                    elseif select == "Frist Spot" then
-                        TP2(CFrame.new(-11, 29, 2771))
-                    elseif select == "Dark Area" then
-                        TP2(CFrame.new(3494, 13, -3259))
-                    elseif select == "Flamingo Mansion" then
-                        TP2(CFrame.new(-317, 331, 597))
-                    elseif select == "Flamingo Room" then
-                        TP2(CFrame.new(2285, 15, 905))
-                    elseif select == "Green Zone" then
-                        TP2(CFrame.new(-2258, 73, -2696))
-                    elseif select == "Zombie Island" then
-                        TP2(CFrame.new(-5552, 194, -776))
-                    elseif select == "Two Snow Mountain" then
-                        TP2(CFrame.new(752, 408, -5277))
-                    elseif select == "Punk Hazard" then
-                        TP2(CFrame.new(-5897, 18, -5096))
-                    elseif select == "Cursed Ship" then
-                        TP2(CFrame.new(919, 125, 32869))
-                    elseif select == "Ice Castle" then
-                        TP2(CFrame.new(5505, 40, -6178))
-                    elseif select == "Forgotten Island" then
-                        TP2(CFrame.new(-3050, 240, -10178))
-                    elseif select == "Ussop Island" then
-                        TP2(CFrame.new(4816, 8, 2863))
-                    elseif select == "Mansion" then
-                        TP2(CFrame.new(-12471, 374, -7551))
-                    elseif select == "Port Town" then
-                        TP2(CFrame.new(-334, 7, 5300))
-                    elseif select == "Castle On The Sea" then
-                        TP2(CFrame.new(-5073, 315, -3153))
-                    elseif select == "Hydra Island" then
-                        TP2(CFrame.new(5756, 610, -282))
-                    elseif select == "Great Tree" then
-                        TP2(CFrame.new(2681, 1682, -7190))
-                    elseif select == "Floating Turtle" then
-                        TP2(CFrame.new(-12528, 332, -8658))
-                    elseif select == "Haunted Castle" then
-                        TP2(CFrame.new(-9517, 142, 5528))
-                    elseif select == "Ice Cream Island" then
-                        TP2(CFrame.new(-902, 79, -10988))
-                    elseif select == "Peanut Island" then
-                        TP2(CFrame.new(-2062, 50, -10232))
-                    elseif select == "Cake Island" then
-                        TP2(CFrame.new(-1897, 14, -11576))
-                    elseif select == "Candy Cane Island" then
-                        TP2(CFrame.new(-1038, 10, -14076))
-                    elseif select == "Tiki Outpost" then
-                        TP2(CFrame.new(-16224, 9, 439))
-                    end
-                    wait(0.5)
-                end
-            end)
-        end
-    end
-})
-
--- Tab: Shop
-local sectionAbilitiesShop = TabShop:CreateSection("Abilities")
-local buyGeppoButton = TabShop:CreateButton({
-    Name = "Buy Geppo [ 10,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Geppo")
-    end
-})
-local buyBusoButton = TabShop:CreateButton({
-    Name = "Buy Buso Haki [ 25,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Buso")
-    end
-})
-local buySoruButton = TabShop:CreateButton({
-    Name = "Buy Soru [ 25,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Soru")
-    end
-})
-local buyObservationButton = TabShop:CreateButton({
-    Name = "Buy Observation Haki [ 750,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("KenTalk", "Buy")
-    end
-})
-local autoBuyAbilitiesToggle = TabShop:CreateToggle({
-    Name = "Auto Buy Abilities",
-    CurrentValue = false,
-    Flag = "AutoBuyAbilities",
-    Callback = function(Value)
-        if Value then
-            task.spawn(function()
-                while getgenv().AutoBuyAbilities do
-                    ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Geppo")
-                    ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Buso")
-                    ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyHaki", "Soru")
-                    wait(0.1)
-                end
-            end)
-        end
-    end
-})
-local sectionFightingStyleShop = TabShop:CreateSection("Fighting Style")
-local buyBlackLegButton = TabShop:CreateButton({
-    Name = "Buy Black Leg [ 150,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyBlackLeg")
-    end
-})
-local buyElectroButton = TabShop:CreateButton({
-    Name = "Buy Electro [ 550,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyElectro")
-    end
-})
-local buyFishmanKarateButton = TabShop:CreateButton({
-    Name = "Buy Fishman Karate [ 750,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyFishmanKarate")
-    end
-})
-local buyDragonClawButton = TabShop:CreateButton({
-    Name = "Buy Dragon Claw [ 1,500 Fragments ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "DragonClaw", "1")
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "DragonClaw", "2")
-    end
-})
-local buySuperhumanButton = TabShop:CreateButton({
-    Name = "Buy Superhuman [ 3,000,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuySuperhuman")
-    end
-})
-local buyDeathStepButton = TabShop:CreateButton({
-    Name = "Buy Death Step [ 5,000 Fragments 5,000,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyDeathStep")
-    end
-})
-local buySharkmanKarateButton = TabShop:CreateButton({
-    Name = "Buy Sharkman Karate [ 5,000 Fragments 2,500,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuySharkmanKarate", true)
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuySharkmanKarate")
-    end
-})
-local buyElectricClawButton = TabShop:CreateButton({
-    Name = "Buy Electric Claw [ 5,000 Fragments 3,000,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyElectricClaw")
-    end
-})
-local buyDragonTalonButton = TabShop:CreateButton({
-    Name = "Buy Dragon Talon [ 5,000 Fragments 3,000,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyDragonTalon")
-    end
-})
-local buyGodHumanButton = TabShop:CreateButton({
-    Name = "Buy God Human [ 5,000 Fragments 5,000,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyGodhuman")
-    end
-})
-local buySanguineArtButton = TabShop:CreateButton({
-    Name = "Buy Sanguine Art [ 5,000 Fragments $5,000,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuySanguineArt", true)
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuySanguineArt")
-    end
-})
-local sectionSwordShop = TabShop:CreateSection("Sword")
-local swords = {"Cutlass", "Katana", "Iron Mace", "Duel Katana", "Triple Katana", "Pipe", "Dual-Headed Blade", "Bisento", "Soul Cane"}
-for _, sword in ipairs(swords) do
-    TabShop:CreateButton({
-        Name = sword .. " [" .. (sword == "Cutlass" and "1,000" or sword == "Katana" and "1,000" or sword == "Iron Mace" and "25,000" or sword == "Duel Katana" and "12,000" or sword == "Triple Katana" and "60,000" or sword == "Pipe" and "100,000" or sword == "Dual-Headed Blade" and "400,000" or sword == "Bisento" and "1,200,000" or sword == "Soul Cane" and "750,000") .. " Beli ]",
-        Callback = function()
-            ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyItem", sword)
-        end
-    })
-end
-local poleV2Button = TabShop:CreateButton({
-    Name = "Pole v.2 [ 5,000 Fragments ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("ThunderGodTalk")
-    end
-})
-local autoYamaToggle = TabShop:CreateToggle({
-    Name = "Yama Sword [ Elite Hunter 30 ]",
-    CurrentValue = false,
-    Flag = "AutoYama",
-    Callback = function(Value)
-        getgenv().Yama = Value
-    end
-})
-local sectionGunShop = TabShop:CreateSection("Gun")
-local guns = {"Slingshot", "Musket", "Flintlock", "Refined Flintlock", "Cannon", "Kabucha", "Bizarre Rifle"}
-for _, gun in ipairs(guns) do
-    TabShop:CreateButton({
-        Name = gun .. " [" .. (gun == "Slingshot" and "5,000" or gun == "Musket" and "8,000" or gun == "Flintlock" and "10,500" or gun == "Refined Flintlock" and "65,000" or gun == "Cannon" and "100,000" or gun == "Kabucha" and "1,500 Fragments" or gun == "Bizarre Rifle" and "250 Ectoplasm") .. "]",
-        Callback = function()
-            if gun == "Refined Flintlock" then
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyItem", "Refined Flintlock")
-            elseif gun == "Kabucha" then
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Slingshot", "1")
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Slingshot", "2")
-            elseif gun == "Bizarre Rifle" then
-                for i = 1, 2 do
-                    ReplicatedStorage.Remotes.CommF_:InvokeServer("Ectoplasm", "Buy", 1)
-                end
-            else
-                ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyItem", gun)
-            end
-        end
-    })
-end
-local sectionStatsShop = TabShop:CreateSection("Stats")
-local resetStatsButton = TabShop:CreateButton({
-    Name = "Reset Stats (Use 2.5K Fragments)",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Refund", "1")
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Refund", "2")
-    end
-})
-local randomRaceButton = TabShop:CreateButton({
-    Name = "Random Race (Use 3K Fragments)",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Reroll", "1")
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BlackbeardReward", "Reroll", "2")
-    end
-})
-local buyCyborgButton = TabShop:CreateButton({
-    Name = "Buy Cyborg (Use 2.5K Fragments)",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("CyborgTrainer", "Buy")
-    end
-})
-local sectionAccessories = TabShop:CreateSection("Accessories")
-local buyBlackCapeButton = TabShop:CreateButton({
-    Name = "Black Cape [ 50,000 Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyItem", "Black Cape")
-    end
-})
-local buySwordsmanHatButton = TabShop:CreateButton({
-    Name = "Swordsman Hat [ 150k Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyItem", "Swordsman Hat")
-    end
-})
-local buyTomoeRingButton = TabShop:CreateButton({
-    Name = "Tomoe Ring [ 500k Beli ]",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("BuyItem", "Tomoe Ring")
-    end
-})
-
--- Tab: Devil Fruits
-local fruitList = require(ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits"))
-local fruitNames = {}
-for _, fruit in ipairs(fruitList) do
-    table.insert(fruitNames, fruit.Name)
-end
-local sectionSniper = TabDevil:CreateSection("Sniper")
-local selectFruitDropdown = TabDevil:CreateDropdown({
-    Name = "Select Fruits Sniper",
-    Options = fruitNames,
-    CurrentOption = {},
-    MultipleOptions = false,
-    Flag = "SelectFruit",
-    Callback = function(Option)
-        getgenv().SelectFruit = Option[1]
-    end
-})
-local autoBuyFruitToggle = TabDevil:CreateToggle({
-    Name = "Auto Buy Fruit Sniper",
-    CurrentValue = false,
-    Flag = "AutoBuyFruit",
-    Callback = function(Value)
-        getgenv().BuyFruitSniper = Value
-    end
-})
-local sectionOthers = TabDevil:CreateSection("Others")
-local selectFruitEatDropdown = TabDevil:CreateDropdown({
-    Name = "Select Fruits Eat",
-    Options = fruitNames,
-    CurrentOption = {},
-    MultipleOptions = false,
-    Flag = "SelectFruitEat",
-    Callback = function(Option)
-        getgenv().SelectFruitEat = Option[1]
-    end
-})
-local autoEatFruitToggle = TabDevil:CreateToggle({
-    Name = "Auto Eat Fruit",
-    CurrentValue = false,
-    Flag = "AutoEatFruit",
-    Callback = function(Value)
-        getgenv().EatFruit = Value
-        if Value then
-            task.spawn(function()
-                while getgenv().EatFruit do
-                    local fruit = Player.Character:FindFirstChild(getgenv().SelectFruitEat) or Player.Backpack:FindFirstChild(getgenv().SelectFruitEat)
-                    if fruit and fruit:FindFirstChild("EatRemote") then
-                        fruit.EatRemote:InvokeServer()
-                    end
-                    wait(1)
-                end
-            end)
-        end
-    end
-})
-local randomFruitButton = TabDevil:CreateButton({
-    Name = "Random Fruit",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("Cousin", "Buy")
-    end
-})
-local openDevilShopButton = TabDevil:CreateButton({
-    Name = "Open Devil Shop",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("GetFruits")
-        Player.PlayerGui.Main.FruitShop.Visible = true
-    end
-})
-local openMirageShopButton = TabDevil:CreateButton({
-    Name = "Open Devil Shop Mirage",
-    Callback = function()
-        local DialogueController = require(ReplicatedStorage.DialogueController)
-        local DialoguesList = require(ReplicatedStorage.DialoguesList)
-        DialogueController.Start(DialogueController, DialoguesList["FruitShop2"])
-    end
-})
-local autoStoreFruitToggle = TabDevil:CreateToggle({
-    Name = "Auto Store Fruit",
-    CurrentValue = false,
-    Flag = "AutoStoreFruit",
-    Callback = function(Value)
-        getgenv().StoreFruit = Value
-    end
-})
-local bringFruitToggle = TabDevil:CreateToggle({
-    Name = "Bring to Fruit",
-    CurrentValue = false,
-    Flag = "BringFruit",
-    Callback = function(Value)
-        getgenv().Grabfruit = Value
-    end
-})
-local tweenFruitToggle = TabDevil:CreateToggle({
-    Name = "Tween to Fruit",
-    CurrentValue = false,
-    Flag = "TweenFruit",
-    Callback = function(Value)
-        getgenv().Tweenfruit = Value
-    end
-})
-
--- Tab: Miscellaneous
-local sectionServer = TabMisc:CreateSection("Server")
-local rejoinButton = TabMisc:CreateButton({
-    Name = "Rejoin Server",
-    Callback = function()
-        TeleportService:Teleport(game.PlaceId, Player)
-    end
-})
-local hopButton = TabMisc:CreateButton({
-    Name = "Server Hop",
-    Callback = function()
-        Hop()
-    end
-})
-local hopLowerPlayerButton = TabMisc:CreateButton({
-    Name = "Hop To Lower Player",
-    Callback = function()
-        getgenv().AutoTeleport = true
-        getgenv().DontTeleportTheSameNumber = true
-        getgenv().CopytoClipboard = false
-        local lowestPlayers = math.huge
-        local lowestId
-        local function fetchServers()
-            local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-            local data = HttpService:JSONDecode(game:HttpGet(url))
-            for _, server in pairs(data.data) do
-                if server.playing < lowestPlayers then
-                    lowestPlayers = server.playing
-                    lowestId = server.id
-                end
-            end
-            if data.nextPageCursor then
-                fetchServers(data.nextPageCursor)
-            end
-        end
-        fetchServers()
-        if lowestId then
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, lowestId)
         else
-            TeleportService:Teleport(game.PlaceId)
+            if autoClickThread then
+                task.cancel(autoClickThread)
+                autoClickThread = nil
+            end
         end
-    end
-})
-local copyJobIdButton = TabMisc:CreateButton({
-    Name = "Copy Job Id",
-    Callback = function()
-        setclipboard(game.JobId)
-    end
-})
-local jobIdInput = TabMisc:CreateInput({
-    Name = "Place Job Id",
-    PlaceholderText = "Enter Job Id",
-    RemoveTextAfterFocusLost = true,
-    Callback = function(Text)
-        getgenv().Job = Text
-    end
-})
-local joinServerButton = TabMisc:CreateButton({
-    Name = "Join Server",
-    Callback = function()
-        TeleportService:TeleportToPlaceInstance(game.PlaceId, getgenv().Job)
-    end
-})
-local sectionMisc = TabMisc:CreateSection("Misc")
-local titleNameButton = TabMisc:CreateButton({
-    Name = "Title Name",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("getTitles")
-        Player.PlayerGui.Main.Titles.Visible = true
-    end
-})
-local colorHakiButton = TabMisc:CreateButton({
-    Name = "Color Haki",
-    Callback = function()
-        Player.PlayerGui.Main.Colors.Visible = true
-    end
-})
-local sectionTeams = TabMisc:CreateSection("Teams")
-local joinPiratesButton = TabMisc:CreateButton({
-    Name = "Join Pirates Team",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Pirates")
-    end
-})
-local joinMarinesButton = TabMisc:CreateButton({
-    Name = "Join Marines Team",
-    Callback = function()
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", "Marines")
-    end
-})
-local sectionAntiAFK = TabMisc:CreateSection("Anti AFK")
-local antiAFKToggle = TabMisc:CreateToggle({
-    Name = "Anti AFK",
-    CurrentValue = true,
-    Flag = "AntiAFK",
-    Callback = function(Value)
-        if Value then
-            Player.Idled:Connect(function()
-                VirtualUser:ClickButton2(Vector2.new())
-                VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
-                wait(1)
-                VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
-            end)
-        end
-    end
-})
-local sectionCodes = TabMisc:CreateSection("Codes")
-local codes = {"KITTGAMING", "ENYU_IS_PRO", "FUDD10", "BIGNEWS", "THEGREATACE", "SUB2GAMERROBOT_EXP1", "STRAWHATMAIME", "SUB2OFFICIALNOOBIE", "SUB2NOOBMASTER123", "SUB2DAIGROCK", "AXIORE", "TANTAIGAMIMG", "STRAWHATMAINE", "JCWK", "FUDD10_V2", "SUB2FER999", "MAGICBIS", "TY_FOR_WATCHING", "STARCODEHEO"}
-local redeemAllButton = TabMisc:CreateButton({
-    Name = "Redeem All Codes",
-    Callback = function()
-        for _, code in ipairs(codes) do
-            ReplicatedStorage.Remotes.Redeem:InvokeServer(code)
-        end
-    end
-})
-local codeDropdown = TabMisc:CreateDropdown({
-    Name = "Selected Codes Reset stat",
-    Options = {"NOOB_REFUND", "SUB2GAMERROBOT_RESET1", "Sub2UncleKizaru"},
-    CurrentOption = {"NOOB_REFUND"},
-    MultipleOptions = false,
-    Flag = "ResetCode",
-    Callback = function(Option)
-        getgenv().CodeSelect = Option[1]
-    end
-})
-local redeemSelectedButton = TabMisc:CreateButton({
-    Name = "Redeem Code (Selected Codes)",
-    Callback = function()
-        ReplicatedStorage.Remotes.Redeem:InvokeServer(getgenv().CodeSelect)
-    end
-})
-local sectionState = TabMisc:CreateSection("State")
-local hakiStateDropdown = TabMisc:CreateDropdown({
-    Name = "Select Haki State",
-    Options = {"State 0", "State 1", "State 2", "State 3", "State 4", "State 5"},
-    CurrentOption = {"State 0"},
-    MultipleOptions = false,
-    Flag = "HakiState",
-    Callback = function(Option)
-        getgenv().SelectStateHaki = Option[1]
-    end
-})
-local changeHakiStateButton = TabMisc:CreateButton({
-    Name = "Change Buso Haki State",
-    Callback = function()
-        local state = tonumber(getgenv().SelectStateHaki:match("%d+")) or 0
-        ReplicatedStorage.Remotes.CommF_:InvokeServer("ChangeBusoStage", state)
     end
 })
 
--- ==================== NOTIFICATION ====================
-Rayfield:Notify({
-    Title = "Shadow Hub",
-    Content = "Loaded successfully!",
-    Duration = 5
+-- Aimbot cơ bản (có thể bật cùng với tab Aim)
+local aimbotBasicEnabled = false
+local aimbotBasicConnection = nil
+CombatTab:CreateToggle({
+    Name = "Aimbot cơ bản (không smooth)",
+    CurrentValue = false,
+    Flag = "AimbotBasic",
+    Callback = function(State)
+        aimbotBasicEnabled = State
+        if State then
+            if aimbotBasicConnection then aimbotBasicConnection:Disconnect() end
+            aimbotBasicConnection = RunService.Heartbeat:Connect(function()
+                if not aimbotBasicEnabled then return end
+                local root = GetRootPart()
+                if not root then return end
+                local target = nil
+                local minDist = 300
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        local tr = player.Character:FindFirstChild("HumanoidRootPart")
+                        local th = player.Character:FindFirstChild("Humanoid")
+                        if tr and th and th.Health > 0 then
+                            local dist = (root.Position - tr.Position).Magnitude
+                            if dist < minDist then
+                                target = tr
+                                minDist = dist
+                            end
+                        end
+                    end
+                end
+                if target then
+                    root.CFrame = CFrame.new(root.Position, target.Position)
+                end
+            end)
+        else
+            if aimbotBasicConnection then
+                aimbotBasicConnection:Disconnect()
+                aimbotBasicConnection = nil
+            end
+        end
+    end
 })
+
+-- ================================================================
+-- TAB AIM (nâng cao: smoothness, tia đỏ, hitbox)
+-- ================================================================
+local AimSection = AimTab:CreateSection("Cài đặt Aim")
+
+-- Biến điều khiển
+local AimSettings = {
+    Enabled = false,
+    Smoothness = 0.3,
+    ShowLaser = false,
+    HitboxMultiplier = 1.0,
+    TargetPart = "Head"  -- Head, HumanoidRootPart, Torso
+}
+local CurrentTarget = nil
+local LaserPart = nil
+local AimConnection = nil
+local HitboxConnection = nil
+local HitboxTargets = {} -- lưu các part đã mở rộng
+
+-- Toggle bật/tắt Aim
+AimTab:CreateToggle({
+    Name = "Bật Aim (nâng cao)",
+    CurrentValue = false,
+    Flag = "AimAdvanced",
+    Callback = function(State)
+        AimSettings.Enabled = State
+        if State then
+            if AimConnection then AimConnection:Disconnect() end
+            AimConnection = RunService.Heartbeat:Connect(function()
+                if not AimSettings.Enabled then return end
+                local root = GetRootPart()
+                if not root then return end
+                -- Tìm mục tiêu gần nhất
+                local target = nil
+                local minDist = 300
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        local tr = player.Character:FindFirstChild(AimSettings.TargetPart)
+                        if not tr then tr = player.Character:FindFirstChild("HumanoidRootPart") end
+                        local th = player.Character:FindFirstChild("Humanoid")
+                        if tr and th and th.Health > 0 then
+                            local dist = (root.Position - tr.Position).Magnitude
+                            if dist < minDist then
+                                target = tr
+                                minDist = dist
+                            end
+                        end
+                    end
+                end
+                CurrentTarget = target
+                if target then
+                    -- Smoothness: nội suy CFrame
+                    local targetCF = CFrame.new(root.Position, target.Position)
+                    local smooth = AimSettings.Smoothness
+                    if smooth >= 1 then
+                        root.CFrame = targetCF
+                    else
+                        local current = root.CFrame
+                        local new = current:Lerp(targetCF, smooth)
+                        root.CFrame = new
+                    end
+                end
+            end)
+            -- Bắt đầu cập nhật laser và hitbox
+            UpdateLaserAndHitbox()
+        else
+            if AimConnection then AimConnection:Disconnect(); AimConnection = nil end
+            if LaserPart then LaserPart:Destroy(); LaserPart = nil end
+            -- Reset hitbox về kích thước cũ
+            ResetAllHitboxes()
+            if HitboxConnection then HitboxConnection:Disconnect(); HitboxConnection = nil end
+        end
+    end
+})
+
+-- Slider Smoothness
+AimTab:CreateSlider({
+    Name = "Độ mượt (0.1 - 1.0)",
+    Range = {0.1, 1.0},
+    Increment = 0.05,
+    Suffix = "smooth",
+    CurrentValue = 0.3,
+    Flag = "AimSmoothness",
+    Callback = function(Value)
+        AimSettings.Smoothness = Value
+    end
+})
+
+-- Dropdown chọn bộ phận nhắm
+AimTab:CreateDropdown({
+    Name = "Bộ phận nhắm",
+    Options = {"Head", "HumanoidRootPart", "Torso"},
+    CurrentOption = "Head",
+    Flag = "AimTargetPart",
+    Callback = function(Option)
+        AimSettings.TargetPart = Option
+    end
+})
+
+-- Slider Hitbox Multiplier
+AimTab:CreateSlider({
+    Name = "Hệ số hitbox (1 - 5)",
+    Range = {1, 5},
+    Increment = 0.1,
+    Suffix = "x",
+    CurrentValue = 1.0,
+    Flag = "HitboxMultiplier",
+    Callback = function(Value)
+        AimSettings.HitboxMultiplier = Value
+        -- Cập nhật hitbox ngay nếu đang bật
+        if AimSettings.Enabled then
+            UpdateHitboxes()
+        end
+    end
+})
+
+-- Toggle Laser (tia đỏ)
+AimTab:CreateToggle({
+    Name = "Hiển thị tia đỏ (Laser)",
+    CurrentValue = false,
+    Flag = "ShowLaser",
+    Callback = function(State)
+        AimSettings.ShowLaser = State
+        if State and AimSettings.Enabled then
+            CreateLaser()
+        else
+            if LaserPart then LaserPart:Destroy(); LaserPart = nil end
+        end
+    end
+})
+
+-- Hàm tạo Laser
+function CreateLaser()
+    if LaserPart then LaserPart:Destroy() end
+    LaserPart = Instance.new("Part")
+    LaserPart.Name = "AimLaser"
+    LaserPart.BrickColor = BrickColor.new("Bright red")
+    LaserPart.Material = Enum.Material.Neon
+    LaserPart.Anchored = true
+    LaserPart.CanCollide = false
+    LaserPart.Transparency = 0.2
+    LaserPart.Size = Vector3.new(0.2, 0.2, 1)
+    LaserPart.Parent = Workspace
+    -- Cập nhật laser mỗi frame
+    local laserConnection = RunService.Heartbeat:Connect(function()
+        if not AimSettings.Enabled or not AimSettings.ShowLaser then
+            if LaserPart then LaserPart:Destroy(); LaserPart = nil end
+            laserConnection:Disconnect()
+            return
+        end
+        local root = GetRootPart()
+        local target = CurrentTarget
+        if root and target then
+            local startPos = root.Position
+            local endPos = target.Position
+            local mid = (startPos + endPos) / 2
+            local distance = (startPos - endPos).Magnitude
+            LaserPart.Size = Vector3.new(0.2, 0.2, distance)
+            LaserPart.CFrame = CFrame.new(mid, endPos) * CFrame.Angles(math.rad(90), 0, 0)
+            LaserPart.Transparency = 0.2
+        else
+            if LaserPart then LaserPart.Transparency = 1 end
+        end
+    end)
+end
+
+-- Hàm cập nhật hitbox
+function UpdateHitboxes()
+    -- Reset hitboxes cũ
+    ResetAllHitboxes()
+    -- Áp dụng multiplier cho tất cả kẻ địch
+    local mult = AimSettings.HitboxMultiplier
+    if mult <= 1 then return end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local char = player.Character
+            for _, part in ipairs(char:GetChildren()) do
+                if part:IsA("BasePart") then
+                    local originalSize = part:GetAttribute("OriginalSize")
+                    if not originalSize then
+                        part:SetAttribute("OriginalSize", part.Size)
+                    else
+                        part.Size = originalSize * mult
+                    end
+                    table.insert(HitboxTargets, part)
+                end
+            end
+        end
+    end
+end
+
+function ResetAllHitboxes()
+    for _, part in ipairs(HitboxTargets) do
+        if part and part.Parent then
+            local orig = part:GetAttribute("OriginalSize")
+            if orig then
+                part.Size = orig
+            end
+        end
+    end
+    HitboxTargets = {}
+end
+
+-- Hàm kết hợp laser + hitbox
+function UpdateLaserAndHitbox()
+    if HitboxConnection then HitboxConnection:Disconnect() end
+    HitboxConnection = RunService.Heartbeat:Connect(function()
+        if AimSettings.Enabled then
+            UpdateHitboxes()
+            if AimSettings.ShowLaser then
+                if not LaserPart then CreateLaser() end
+            else
+                if LaserPart then LaserPart:Destroy(); LaserPart = nil end
+            end
+        else
+            ResetAllHitboxes()
+            if LaserPart then LaserPart:Destroy(); LaserPart = nil end
+        end
+    end)
+end
+
+-- ================================================================
+-- TAB DỊCH CHUYỂN
+-- ================================================================
+local TeleportSection = TeleportTab:CreateSection("Teleport")
+
+TeleportTab:CreateTextBox({
+    Name = "Nhập tọa độ (x,y,z)",
+    PlaceholderText = "0,50,0",
+    RemoveTextAfterFocusLost = false,
+    Flag = "CoordInput",
+    Callback = function(Text)
+        local parts = {}
+        for num in string.gmatch(Text, "[^,]+") do
+            table.insert(parts, tonumber(num))
+        end
+        if #parts == 3 then
+            local root = GetRootPart()
+            if root then
+                root.CFrame = CFrame.new(parts[1], parts[2], parts[3])
+            end
+        end
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Teleport về Spawn",
+    Callback = function()
+        local spawn = Workspace:FindFirstChild("SpawnLocation")
+        if spawn then
+            local root = GetRootPart()
+            if root then
+                root.CFrame = spawn.CFrame + Vector3.new(0, 5, 0)
+            end
+        else
+            Rayfield:Notify({
+                Title = "Lỗi",
+                Content = "Không tìm thấy SpawnLocation",
+                Duration = 3
+            })
+        end
+    end
+})
+
+TeleportTab:CreateButton({
+    Name = "Teleport lên cao 1000",
+    Callback = function()
+        local root = GetRootPart()
+        if root then
+            root.CFrame = root.CFrame + Vector3.new(0, 1000, 0)
+        end
+    end
+})
+
+-- ================================================================
+-- TAB ESP
+-- ================================================================
+local espEnabled = false
+local espBillboards = {}
+local espConnection = nil
+
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    if not player.Character then return end
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    local bill = Instance.new("BillboardGui")
+    bill.Name = "ESP_BILL"
+    bill.Size = UDim2.new(0, 200, 0, 40)
+    bill.Adornee = root
+    bill.AlwaysOnTop = true
+    bill.Parent = root
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,1,0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255,50,50)
+    label.TextScaled = true
+    label.Font = Enum.Font.SourceSansBold
+    label.Text = player.Name
+    label.Parent = bill
+    espBillboards[player] = bill
+end
+
+local function RemoveESP(player)
+    if espBillboards[player] then
+        espBillboards[player]:Destroy()
+        espBillboards[player] = nil
+    end
+end
+
+local function UpdateESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if espEnabled then
+            if player ~= LocalPlayer and player.Character then
+                if not espBillboards[player] then CreateESP(player) end
+                local root = GetRootPart()
+                local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+                if espBillboards[player] and root and targetRoot then
+                    local label = espBillboards[player]:FindFirstChildOfClass("TextLabel")
+                    if label then
+                        local dist = math.floor((root.Position - targetRoot.Position).Magnitude)
+                        label.Text = player.Name .. " | " .. dist .. "m"
+                    end
+                end
+            end
+        else
+            RemoveESP(player)
+        end
+    end
+end
+
+ESPTab:CreateToggle({
+    Name = "Bật/Tắt ESP (tên + khoảng cách)",
+    CurrentValue = false,
+    Flag = "ESP",
+    Callback = function(State)
+        espEnabled = State
+        if State then
+            if espConnection then espConnection:Disconnect() end
+            espConnection = RunService.Heartbeat:Connect(UpdateESP)
+            UpdateESP()
+        else
+            if espConnection then espConnection:Disconnect(); espConnection = nil end
+            for player, _ in pairs(espBillboards) do RemoveESP(player) end
+        end
+    end
+})
+Players.PlayerRemoving:Connect(function(player) RemoveESP(player) end)
+
+-- ================================================================
+-- TAB TÙY CHỈNH
+-- ================================================================
+local MiscSection = MiscTab:CreateSection("Cài đặt giao diện")
+
+MiscTab:CreateButton({
+    Name = "🔁 Reset tất cả cài đặt",
+    Callback = function()
+        -- Reset các flag về mặc định (thực tế Rayfield tự lưu, ta chỉ thông báo)
+        Rayfield:Notify({
+            Title = "Đã reset",
+            Content = "Khởi động lại script để áp dụng",
+            Duration = 3
+        })
+    end
+})
+
+MiscTab:CreateButton({
+    Name = "📋 Thông tin",
+    Callback = function()
+        Rayfield:Notify({
+            Title = "Universal Hub",
+            Content = "Version 3.0 | Rayfield UI | nhatanh Dev",
+            Duration = 5
+        })
+    end
+})
+
+-- ===== THÔNG BÁO KHỞI ĐỘNG =====
+Rayfield:Notify({
+    Title = "Universal Hub",
+    Content = "Đã tải thành công! Nhấn F5 để mở/đóng menu.",
+    Duration = 4
+})
+
+print("[+] Universal Hub (Rayfield) đã tải. F5 để mở menu.")
