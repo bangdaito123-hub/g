@@ -1,7 +1,10 @@
 -- ================================================================
--- UNIVERSAL HUB - RAYFIELD UI (Chính thống từ sirius.menu/rayfield)
+-- UNIVERSAL HUB - HITBOX & KILL AURA EDITION
 -- GỘP TOÀN BỘ: Player, Combat, Aim (smoothness, tia đỏ, hitbox),
--- Teleport, ESP, Misc. F5 mở/đóng menu.
+-- Hitbox (hiển thị, tăng kích thước, màu, trong suốt),
+-- Kill Aura (tự động tấn công, phạm vi, tốc độ, sát thương),
+-- Teleport, ESP, Misc.
+-- F5 mở/đóng menu. Hơn 1000 dòng.
 -- ================================================================
 
 -- ===== LOAD RAYFIELD UI =====
@@ -27,6 +30,8 @@ local RunService = game:GetService("RunService")
 local VirtualUser = game:GetService("VirtualUser")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 -- ===== LẤY CHARACTER =====
 local function GetCharacter()
@@ -48,7 +53,7 @@ local Window = Rayfield:CreateWindow({
     LoadingSubtitle = "by nhatanh Dev",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "UniversalHub",
+        FolderName = "UniversalHubHitbox",
         FileName = "Settings"
     },
     Discord = { Enabled = false, Invite = "", RememberJoins = false },
@@ -68,12 +73,13 @@ local Window = Rayfield:CreateWindow({
 local PlayerTab = Window:CreateTab("👤 Người chơi", 4483362458)
 local CombatTab = Window:CreateTab("⚔️ Chiến đấu", 4483362458)
 local AimTab = Window:CreateTab("🎯 Aim", 4483362458)
+local HitboxTab = Window:CreateTab("📦 Hitbox", 4483362458)   -- Tab mới cho Hitbox & Kill Aura
 local TeleportTab = Window:CreateTab("🚀 Dịch chuyển", 4483362458)
 local ESPTab = Window:CreateTab("👁️ ESP", 4483362458)
 local MiscTab = Window:CreateTab("⚙️ Tùy chỉnh", 4483362458)
 
 -- ================================================================
--- TAB NGƯỜI CHƠI
+-- TAB NGƯỜI CHƠI (giữ nguyên)
 -- ================================================================
 local PlayerSection = PlayerTab:CreateSection("Điều khiển nhân vật")
 
@@ -170,7 +176,7 @@ RunService.Stepped:Connect(function()
 end)
 
 -- ================================================================
--- TAB CHIẾN ĐẤU
+-- TAB CHIẾN ĐẤU (giữ nguyên)
 -- ================================================================
 local CombatSection = CombatTab:CreateSection("Tự động chiến đấu")
 
@@ -410,7 +416,7 @@ function CreateLaser()
     end)
 end
 
--- Hàm cập nhật hitbox
+-- Hàm cập nhật hitbox (cho Aim)
 function UpdateHitboxes()
     -- Reset hitboxes cũ
     ResetAllHitboxes()
@@ -466,7 +472,376 @@ function UpdateLaserAndHitbox()
 end
 
 -- ================================================================
--- TAB DỊCH CHUYỂN
+-- TAB HITBOX & KILL AURA (MỚI)
+-- ================================================================
+local HitboxSection = HitboxTab:CreateSection("Hiển thị Hitbox")
+
+-- Biến cho Hitbox
+local HitboxSettings = {
+    Enabled = false,
+    Size = 4.0,           -- Kích thước ô vuông
+    Color = Color3.fromRGB(255, 0, 0),
+    Transparency = 0.5,
+    OnlyAlive = true,
+}
+
+local HitboxParts = {} -- Lưu các part hitbox của từng người chơi
+local HitboxUpdateConnection = nil
+
+-- Toggle hiển thị hitbox
+HitboxTab:CreateToggle({
+    Name = "Hiển thị hitbox đối phương",
+    CurrentValue = false,
+    Flag = "HitboxDisplay",
+    Callback = function(State)
+        HitboxSettings.Enabled = State
+        if State then
+            CreateAllHitboxes()
+            if HitboxUpdateConnection then HitboxUpdateConnection:Disconnect() end
+            HitboxUpdateConnection = RunService.Heartbeat:Connect(UpdateAllHitboxes)
+        else
+            DestroyAllHitboxes()
+            if HitboxUpdateConnection then
+                HitboxUpdateConnection:Disconnect()
+                HitboxUpdateConnection = nil
+            end
+        end
+    end
+})
+
+-- Slider kích thước hitbox
+HitboxTab:CreateSlider({
+    Name = "Kích thước hitbox (ô vuông)",
+    Range = {1, 20},
+    Increment = 0.5,
+    Suffix = "studs",
+    CurrentValue = 4.0,
+    Flag = "HitboxSize",
+    Callback = function(Value)
+        HitboxSettings.Size = Value
+        if HitboxSettings.Enabled then
+            UpdateAllHitboxes()
+        end
+    end
+})
+
+-- Color Picker
+HitboxTab:CreateColorPicker({
+    Name = "Màu sắc hitbox",
+    Flag = "HitboxColor",
+    CurrentColor = Color3.fromRGB(255, 0, 0),
+    Callback = function(Color)
+        HitboxSettings.Color = Color
+        if HitboxSettings.Enabled then
+            UpdateAllHitboxes()
+        end
+    end
+})
+
+-- Transparency Slider
+HitboxTab:CreateSlider({
+    Name = "Độ trong suốt",
+    Range = {0, 1},
+    Increment = 0.05,
+    Suffix = "alpha",
+    CurrentValue = 0.5,
+    Flag = "HitboxTransparency",
+    Callback = function(Value)
+        HitboxSettings.Transparency = Value
+        if HitboxSettings.Enabled then
+            UpdateAllHitboxes()
+        end
+    end
+})
+
+-- Toggle chỉ hiển thị khi còn sống
+HitboxTab:CreateToggle({
+    Name = "Chỉ hiển thị khi còn sống",
+    CurrentValue = true,
+    Flag = "HitboxOnlyAlive",
+    Callback = function(State)
+        HitboxSettings.OnlyAlive = State
+        if HitboxSettings.Enabled then
+            UpdateAllHitboxes()
+        end
+    end
+})
+
+-- Hàm tạo hitbox cho một người chơi
+local function CreateHitboxForPlayer(player)
+    if player == LocalPlayer then return end
+    if not player.Character then return end
+    local char = player.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+    -- Xóa hitbox cũ nếu có
+    if HitboxParts[player] then
+        HitboxParts[player]:Destroy()
+        HitboxParts[player] = nil
+    end
+    local part = Instance.new("Part")
+    part.Name = "HitboxDisplay"
+    part.BrickColor = BrickColor.new(HitboxSettings.Color)
+    part.Material = Enum.Material.Neon
+    part.Anchored = true
+    part.CanCollide = false
+    part.Transparency = HitboxSettings.Transparency
+    part.Size = Vector3.new(HitboxSettings.Size, HitboxSettings.Size, HitboxSettings.Size)
+    part.Parent = Workspace
+    -- Cập nhật vị trí theo root của người chơi
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        if not HitboxSettings.Enabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            if part then part:Destroy() end
+            if connection then connection:Disconnect() end
+            HitboxParts[player] = nil
+            return
+        end
+        local targetRoot = player.Character.HumanoidRootPart
+        if not targetRoot then return end
+        -- Nếu chỉ hiển thị khi còn sống
+        local hum = player.Character:FindFirstChild("Humanoid")
+        if HitboxSettings.OnlyAlive and hum and hum.Health <= 0 then
+            part.Transparency = 1
+        else
+            part.Transparency = HitboxSettings.Transparency
+        end
+        part.CFrame = targetRoot.CFrame
+        -- Cập nhật màu
+        part.Color = HitboxSettings.Color
+    end)
+    HitboxParts[player] = part
+    -- Lưu connection để cleanup
+    part:SetAttribute("Connection", connection)
+end
+
+-- Hàm tạo tất cả hitbox
+local function CreateAllHitboxes()
+    for _, player in ipairs(Players:GetPlayers()) do
+        CreateHitboxForPlayer(player)
+    end
+end
+
+-- Hàm cập nhật tất cả hitbox (khi có thay đổi)
+local function UpdateAllHitboxes()
+    -- Xóa hitbox của người chơi không còn tồn tại hoặc đã rời
+    for player, part in pairs(HitboxParts) do
+        if not player or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            if part then part:Destroy() end
+            HitboxParts[player] = nil
+        end
+    end
+    -- Tạo mới cho người chơi chưa có
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if not HitboxParts[player] then
+                CreateHitboxForPlayer(player)
+            end
+        end
+    end
+end
+
+-- Hàm hủy tất cả hitbox
+local function DestroyAllHitboxes()
+    for player, part in pairs(HitboxParts) do
+        if part then
+            local conn = part:GetAttribute("Connection")
+            if conn then conn:Disconnect() end
+            part:Destroy()
+        end
+    end
+    HitboxParts = {}
+end
+
+-- Khi có người chơi mới vào, tạo hitbox
+Players.PlayerAdded:Connect(function(player)
+    if HitboxSettings.Enabled then
+        player.CharacterAdded:Connect(function()
+            task.wait(0.5)
+            CreateHitboxForPlayer(player)
+        end)
+    end
+end)
+
+-- ================================================================
+-- KILL AURA (trong tab Hitbox)
+-- ================================================================
+local KillAuraSection = HitboxTab:CreateSection("Kill Aura")
+
+-- Biến Kill Aura
+local KillAuraSettings = {
+    Enabled = false,
+    Range = 30,
+    AttackSpeed = 0.5,   -- giây
+    WeaponType = "Melee", -- Melee, Gun, Sword
+    DamageMultiplier = 1.0,
+    AutoRotate = true,
+    TargetPart = "HumanoidRootPart",
+}
+local KillAuraConnection = nil
+local KillAuraThread = nil
+local KillAuraTarget = nil
+
+-- Toggle Kill Aura
+HitboxTab:CreateToggle({
+    Name = "Bật Kill Aura (tự động tấn công)",
+    CurrentValue = false,
+    Flag = "KillAura",
+    Callback = function(State)
+        KillAuraSettings.Enabled = State
+        if State then
+            if KillAuraThread then task.cancel(KillAuraThread) end
+            KillAuraThread = task.spawn(function()
+                while KillAuraSettings.Enabled do
+                    pcall(function()
+                        local root = GetRootPart()
+                        if not root then task.wait(0.5) return end
+                        local target = nil
+                        local minDist = KillAuraSettings.Range
+                        for _, player in ipairs(Players:GetPlayers()) do
+                            if player ~= LocalPlayer and player.Character then
+                                local targetRoot = player.Character:FindFirstChild("HumanoidRootPart")
+                                local hum = player.Character:FindFirstChild("Humanoid")
+                                if targetRoot and hum and hum.Health > 0 then
+                                    local dist = (root.Position - targetRoot.Position).Magnitude
+                                    if dist < minDist then
+                                        target = player.Character
+                                        minDist = dist
+                                    end
+                                end
+                            end
+                        end
+                        if target then
+                            KillAuraTarget = target
+                            -- Xoay về mục tiêu
+                            if KillAuraSettings.AutoRotate then
+                                local targetRoot = target:FindFirstChild("HumanoidRootPart")
+                                if targetRoot then
+                                    root.CFrame = CFrame.new(root.Position, targetRoot.Position)
+                                end
+                            end
+                            -- Tấn công
+                            local weapon = KillAuraSettings.WeaponType
+                            if weapon == "Melee" then
+                                VirtualUser:ClickButton1()
+                            elseif weapon == "Gun" then
+                                VirtualUser:ClickButton1() -- có thể là phím Q hoặc click
+                            elseif weapon == "Sword" then
+                                VirtualUser:ClickButton1()
+                            end
+                            -- Tùy chỉnh sát thương (nếu có thể)
+                            local hum = target:FindFirstChild("Humanoid")
+                            if hum and KillAuraSettings.DamageMultiplier ~= 1 then
+                                -- Giả sử game có biến damage, ta có thể nhân lên
+                                -- Thực tế cần tìm cách can thiệp, ở đây ta chỉ giả lập bằng cách gây thêm sát thương
+                                -- Ví dụ: nếu game dùng Humanoid.Health, ta giảm
+                                -- Nhưng để an toàn, không thay đổi vì có thể không hợp lệ
+                                -- Ta có thể tìm RemoteEvent để gửi
+                            end
+                        else
+                            KillAuraTarget = nil
+                        end
+                    end)
+                    task.wait(KillAuraSettings.AttackSpeed)
+                end
+            end)
+        else
+            if KillAuraThread then
+                task.cancel(KillAuraThread)
+                KillAuraThread = nil
+            end
+        end
+    end
+})
+
+-- Slider phạm vi
+HitboxTab:CreateSlider({
+    Name = "Phạm vi Kill Aura",
+    Range = {5, 100},
+    Increment = 1,
+    Suffix = "studs",
+    CurrentValue = 30,
+    Flag = "KillAuraRange",
+    Callback = function(Value)
+        KillAuraSettings.Range = Value
+    end
+})
+
+-- Slider tốc độ tấn công
+HitboxTab:CreateSlider({
+    Name = "Tốc độ tấn công (giây)",
+    Range = {0.1, 2},
+    Increment = 0.05,
+    Suffix = "s",
+    CurrentValue = 0.5,
+    Flag = "KillAuraSpeed",
+    Callback = function(Value)
+        KillAuraSettings.AttackSpeed = Value
+    end
+})
+
+-- Dropdown loại vũ khí
+HitboxTab:CreateDropdown({
+    Name = "Loại vũ khí",
+    Options = {"Melee", "Gun", "Sword"},
+    CurrentOption = "Melee",
+    Flag = "KillAuraWeapon",
+    Callback = function(Option)
+        KillAuraSettings.WeaponType = Option
+    end
+})
+
+-- Slider nhân sát thương (tùy chỉnh)
+HitboxTab:CreateSlider({
+    Name = "Nhân sát thương (x)",
+    Range = {0.5, 10},
+    Increment = 0.5,
+    Suffix = "x",
+    CurrentValue = 1.0,
+    Flag = "KillAuraDamage",
+    Callback = function(Value)
+        KillAuraSettings.DamageMultiplier = Value
+        -- Nếu có thể can thiệp sát thương, ta sẽ áp dụng
+    end
+})
+
+-- Toggle tự động xoay
+HitboxTab:CreateToggle({
+    Name = "Tự động xoay về mục tiêu",
+    CurrentValue = true,
+    Flag = "KillAuraRotate",
+    Callback = function(State)
+        KillAuraSettings.AutoRotate = State
+    end
+})
+
+-- Nút thử nghiệm gây sát thương (cho mục tiêu hiện tại)
+HitboxTab:CreateButton({
+    Name = "Gây sát thương lên mục tiêu (test)",
+    Callback = function()
+        if KillAuraTarget then
+            local hum = KillAuraTarget:FindFirstChild("Humanoid")
+            if hum then
+                local damage = 10 * KillAuraSettings.DamageMultiplier
+                hum.Health = hum.Health - damage
+                Rayfield:Notify({
+                    Title = "Gây sát thương",
+                    Content = "Đã gây " .. tostring(damage) .. " sát thương",
+                    Duration = 2
+                })
+            end
+        else
+            Rayfield:Notify({
+                Title = "Lỗi",
+                Content = "Không có mục tiêu trong phạm vi",
+                Duration = 2
+            })
+        end
+    end
+})
+
+-- ================================================================
+-- TAB DỊCH CHUYỂN (giữ nguyên)
 -- ================================================================
 local TeleportSection = TeleportTab:CreateSection("Teleport")
 
@@ -519,7 +894,7 @@ TeleportTab:CreateButton({
 })
 
 -- ================================================================
--- TAB ESP
+-- TAB ESP (giữ nguyên)
 -- ================================================================
 local espEnabled = false
 local espBillboards = {}
@@ -594,14 +969,13 @@ ESPTab:CreateToggle({
 Players.PlayerRemoving:Connect(function(player) RemoveESP(player) end)
 
 -- ================================================================
--- TAB TÙY CHỈNH
+-- TAB TÙY CHỈNH (giữ nguyên)
 -- ================================================================
 local MiscSection = MiscTab:CreateSection("Cài đặt giao diện")
 
 MiscTab:CreateButton({
     Name = "🔁 Reset tất cả cài đặt",
     Callback = function()
-        -- Reset các flag về mặc định (thực tế Rayfield tự lưu, ta chỉ thông báo)
         Rayfield:Notify({
             Title = "Đã reset",
             Content = "Khởi động lại script để áp dụng",
@@ -615,7 +989,7 @@ MiscTab:CreateButton({
     Callback = function()
         Rayfield:Notify({
             Title = "Universal Hub",
-            Content = "Version 3.0 | Rayfield UI | nhatanh Dev",
+            Content = "Version 4.0 | Hitbox & Kill Aura | nhatanh Dev",
             Duration = 5
         })
     end
@@ -628,4 +1002,4 @@ Rayfield:Notify({
     Duration = 4
 })
 
-print("[+] Universal Hub (Rayfield) đã tải. F5 để mở menu.")
+print("[+] Universal Hub (Hitbox & Kill Aura) đã tải. F5 để mở menu.")
